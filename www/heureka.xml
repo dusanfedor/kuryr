@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SHOP>
+    <SHOPITEM>
+        <ITEM_ID>nike-air-max-01</ITEM_ID>
+        <PRODUCTNAME>Bílé botasky Nike Air Max</PRODUCTNAME>
+        <PRICE_VAT>2990</PRICE_VAT>
+        <STOCK>12</STOCK>
+        <DESCRIPTION>Skladem v Holešovicích</DESCRIPTION>
+    </SHOPITEM>
+    <SHOPITEM>
+        <ITEM_ID>adidas-superstar-02</ITEM_ID>
+        <PRODUCTNAME>Černé tenisky Adidas Superstar</PRODUCTNAME>
+        <PRICE_VAT>1990</PRICE_VAT>
+        <STOCK>4</STOCK>
+        <DESCRIPTION>Skladem na prodejně na Stromovce</DESCRIPTION>
+    </SHOPITEM>
+</SHOP>

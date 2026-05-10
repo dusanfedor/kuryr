@@ -1,6 +1,7 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
+const axios = require('axios');
 
 const app = express();
 
@@ -9,27 +10,27 @@ const supabaseUrl = 'https://egqytbxxhcmafzqkiogd.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVncXl0Ynh4aGNtYWZ6cWtpb2dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzM0MzEsImV4cCI6MjA5MzgwOTQzMX0.rmUculPKT_xsYf1uFY8ubq3x5mSF_nahMEQwL9uHcsY';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Statické soubory ze složky www (bezpečnější cesta)
-app.use(express.static(path.join(__dirname, 'www')));
+// Statické soubory ze složky www s vypnutou mezipamětí pro okamžité aktualizace v mobilech
+app.use(express.static(path.join(__dirname, 'www'), {
+    setHeaders: (res, path) => {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    }
+}));
 app.use(express.json());
 
 // Oprava favicon chyby (vrátí 'No Content')
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// 2. API pro hledání
-// 2. API pro hledání produktů i s polohou prodejce
 // 2. API pro hledání produktů i s polohou prodejce
 app.get('/api/hledej', async (req, res) => {
     let { zbozi } = req.query;
     
     if (zbozi) {
-        // 1. Odstraní uvozovky (české i anglické), tečky, čárky a převede na malá písmena
         zbozi = zbozi.replace(/["'„“.]/g, "").trim().toLowerCase();
     } else {
         zbozi = "";
     }
 
-    // TENTO LOG NÁM V DASHBOARDU UKÁŽE PŘESNOU PODOBU SLOVA BEZ SKRYTÝCH ZNAKŮ
     console.log(`[RENDER LOG] Vyčištěný výraz posílaný do Supabase: >>>${zbozi}<<<`);
 
     try {
@@ -50,9 +51,6 @@ app.get('/api/hledej', async (req, res) => {
     }
 });
 
-
-
-// 3. API pro registraci
 // 3. API pro registraci nového prodejce
 app.post('/api/registrovat', async (req, res) => {
     const { jmeno, nabidka, lat, lng, telefon } = req.body;
@@ -76,7 +74,6 @@ app.post('/api/objednat', async (req, res) => {
     console.log(`[LOG OBJEDNÁVKA] Nový nákup! Produkt ID: ${produkt_id}, Zpráva: "${zprava}"`);
 
     try {
-        // Zápis do nové tabulky objednávek v Supabase
         const { data, error } = await supabase
             .from('objednavky')
             .insert([
@@ -101,15 +98,12 @@ app.post('/api/objednat', async (req, res) => {
     }
 });
 
-// 5. API pro kurýry - vrátí všechny objednávky, které čekají na odvoz, i s polohou obchodu
-
 // ==========================================
-// TRASY PRO KURÝRY (Před koncem souboru)
+// TRASY PRO KURÝRY
 // ==========================================
 
-// A) Datová trasa - načítá zakázky ze Supabase (TUTO ZDE PONECH!)
+// A) Datová trasa - načítá zakázky ze Supabase
 app.get('/api/kuryr/objednavky', async (req, res) => {
-    console.log('[KURYR API] Načítám objednávky pro řidiče...');
     try {
         const { data, error } = await supabase
             .from('objednavky')
@@ -119,7 +113,7 @@ app.get('/api/kuryr/objednavky', async (req, res) => {
                 zprava_pro_kuryra,
                 vytvoreno_at,
                 produkty ( nazev, cena ),
-                prodejci ( jmeno, telefon, poloha )
+                prodejci ( jmeno, telephone:telefon, poloha )
             `)
             .eq('stav', 'Čeká na vyzvednutí');
 
@@ -134,7 +128,7 @@ app.get('/api/kuryr/objednavky', async (req, res) => {
                 produkt_nazev: o.produkty ? o.produkty.nazev : 'Neznámé zboží',
                 produkt_cena: o.produkty ? o.produkty.cena : 0,
                 prodejce_jmeno: o.prodejci ? o.prodejci.jmeno : 'Neznámý obchod',
-                prodejce_telefon: o.prodejci ? o.prodejci.telefon : '',
+                prodejce_telefon: o.prodejci ? o.prodejci.telephone : '',
                 lat: 50.1015,
                 lng: 14.4455
             };
@@ -146,17 +140,17 @@ app.get('/api/kuryr/objednavky', async (req, res) => {
     }
 });
 
-// B) Zobrazovací trasa - opravuje nefunkční Cannot GET na mobilu (TUTO PŘIDEJ SEM!)
+// B) Zobrazovací trasa - opravuje nefunkční Cannot GET na mobilu
 app.get('/kuryr.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'www', 'kuryr.html'));
 });
-// 6. API pro kurýry - označí objednávku jako doručenou (změní stav v Supabase)
+
+// C) Trasa pro označení objednávky jako doručené (změní stav v Supabase)
 app.post('/api/kuryr/doruceno', async (req, res) => {
     const { objednavka_id } = req.body;
     console.log(`[KURYR API] Zakázka ID: ${objednavka_id} byla doručena.`);
 
     try {
-        // Aktualizujeme stav řádku v Supabase
         const { data, error } = await supabase
             .from('objednavky')
             .update({ stav: 'Doručeno' })
@@ -176,21 +170,12 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
 });
 
 // ==========================================
-// SAMOTNÝ START SERVERU (Úplný konec souboru)
+// AUTOMATICKÝ INTERNETOVÝ XML STAHOVAČ
 // ==========================================
-const port = process.env.PORT || 3000;
-app.listen(port, '0.0.0.0', () => {
-    console.log(`Server běží na portu ${port}`);
-});
-
-const axios = require('axios');
-
-// Funkce pro simulaci a zpracování XML feedu prodejce
 async function synchronizujXmlFeedy() {
-    console.log('[XML STAHOVAČ] Startuji kontrolu XML feedů...');
+    console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
     
     try {
-        // 1. Vytáhneme ze Supabase všechny prodejce, kteří mají vyplněnou URL feedu
         const { data: prodejci, error: dbError } = await supabase
             .from('prodejci')
             .select('id, jmeno, xml_url')
@@ -199,46 +184,30 @@ async function synchronizujXmlFeedy() {
         if (dbError) throw dbError;
 
         for (const prodejce of prodejci) {
-            console.log(`[XML STAHOVAČ] Stahuji feed pro: ${prodejce.jmeno}`);
+            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed pro: ${prodejce.jmeno}`);
             
-            // SIMULACE: Protože nemáme reálný e-shop, vytvoříme si ukázková Heureka data přímo v kódu
-            const fiktivniXmlFeed = `
-                <?xml version="1.0" encoding="utf-8"?>
-                <SHOP>
-                    <SHOPITEM>
-                        <ITEM_ID>nike-air-max-01</ITEM_ID>
-                        <PRODUCTNAME>Bílé botasky Nike Air Max</PRODUCTNAME>
-                        <PRICE_VAT>2990</PRICE_VAT>
-                        <STOCK>12</STOCK>
-                        <DESCRIPTION>Skladem v Holešovicích</DESCRIPTION>
-                    </SHOPITEM>
-                    <SHOPITEM>
-                        <ITEM_ID>adidas-superstar-02</ITEM_ID>
-                        <PRODUCTNAME>Černé tenisky Adidas Superstar</PRODUCTNAME>
-                        <PRICE_VAT>1990</PRICE_VAT>
-                        <STOCK>4</STOCK>
-                        <DESCRIPTION>Skladem na prodejně</DESCRIPTION>
-                    </SHOPITEM>
-                </SHOP>
-            `;
+            const response = await axios.get(prodejce.xml_url);
+            const surovaXmlData = response.data;
 
-            // Jednoduché Node.js rozsekání textu XML bez nutnosti velkých knihoven
-            const polozky = fiktivniXmlFeed.split('<SHOPITEM>');
-            
-            // Odřízneme hlavičku XML
+            const polozky = surovaXmlData.split('<SHOPITEM>');
             polozky.shift(); 
 
-            console.log(`[XML STAHOVAČ] Nalezeno ${polozky.length} produktů k uložení.`);
-
             for (const polozka of polozky) {
-                // Vytáhneme hodnoty z XML značek pomocí základního textového vyhledávání
-                const item_id = polozka.substring(polozka.indexOf('<ITEM_ID>') + 9, polozka.indexOf('</ITEM_ID>'));
-                const nazev = polozka.substring(polozka.indexOf('<PRODUCTNAME>') + 13, polozka.indexOf('</PRODUCTNAME>'));
+                const item_id = polozka.substring(polozka.indexOf('<ITEM_ID>') + 9, polozka.indexOf('</ITEM_ID>')).trim();
+                const nazev = polozka.substring(polozka.indexOf('<PRODUCTNAME>') + 13, polozka.indexOf('</PRODUCTNAME>')).trim();
                 const cena = parseFloat(polozka.substring(polozka.indexOf('<PRICE_VAT>') + 11, polozka.indexOf('</PRICE_VAT>')));
                 const sklad = parseInt(polozka.substring(polozka.indexOf('<STOCK>') + 7, polozka.indexOf('</STOCK>')));
-                const nabidka = polozka.substring(polozka.indexOf('<DESCRIPTION>') + 13, polozka.indexOf('</DESCRIPTION>'));
+                
+                let popis = "";
+                if (polozka.includes('<DESCRIPTION>')) {
+                    popis = polozka.substring(polozka.indexOf('<DESCRIPTION>') + 13, polozka.indexOf('</DESCRIPTION>')).trim();
+                }
 
-                // Uložíme nebo zaktualizujeme produkt v Supabase (příkaz UPSERT zabrání duplicitám)
+                let obrazek = "";
+                if (polozka.includes('<IMGURL>')) {
+                    obrazek = polozka.substring(polozka.indexOf('<IMGURL>') + 8, polozka.indexOf('</IMGURL>')).trim();
+                }
+
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({
@@ -247,19 +216,28 @@ async function synchronizujXmlFeedy() {
                         nazev: nazev,
                         cena: cena,
                         sklad: sklad,
-                        nabidka: nabidka
-                    }, { onConflict: 'item_id' }); // Pokud produkt se stejným item_id už existuje, pouze ho zaktualizuje
+                        popis: popis,       
+                        obrazek: obrazek     
+                    }, { onConflict: 'item_id' });
 
                 if (upsertError) {
                     console.error(`[XML STAHOVAČ] Chyba uložení produktu ${nazev}:`, upsertError.message);
                 }
             }
-            console.log(`[XML STAHOVAČ] Synchronizace pro ${prodejce.jmeno} dokončena.`);
+            console.log(`[XML STAHOVAČ] Internetová synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
         }
     } catch (err) {
         console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
     }
 }
 
-// Spustíme stahování automaticky 10 vteřin po startu serveru, aby se tabulka naplnila
+// Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
+
+// ==========================================
+// SAMOTNÝ START SERVERU (Úplný konec souboru)
+// ==========================================
+const port = process.env.PORT || 3000;
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server běží na portu ${port}`);
+});

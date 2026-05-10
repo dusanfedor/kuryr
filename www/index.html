@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuryr - Vyhledávání na mapě</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" /> 
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root { --primary: #28a745; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 500px; padding: 20px; text-align: center; }
+        .btn-voice { width: 100%; padding: 20px; background: var(--primary); color: white; border: none; border-radius: 15px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        #map { height: 300px; width: 100%; border-radius: 15px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: none; }
+        .prodejce-karta { background: white; border-radius: 15px; padding: 15px; margin-top: 10px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .nav-btn { display: inline-block; margin-top: 10px; padding: 10px 15px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: bold; }
+        #status { height: 25px; margin-top: 20px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="status">Připraveno</div> 
+        <button class="btn-voice" onclick="startHlas()">🎤 Hledat hlasem</button>
+        <div id="map"></div>
+        <div id="vysledky"></div>
+    </div>
+
+    <script>
+        let map;
+        let markers = [];
+        let mojePoloha;
+
+        function initMap(lat, lng) {
+            const mapEl = document.getElementById('map');
+            mapEl.style.display = 'block';
+            if (!map) {
+                map = L.map('map').setView([lat, lng], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            } else {
+                map.setView([lat, lng], 13);
+            }
+            if (mojePoloha) map.removeLayer(mojePoloha);
+            mojePoloha = L.circle([lat, lng], { color: 'blue', fillColor: '#30f', fillOpacity: 0.4, radius: 30 }).addTo(map).bindPopup("Tvoje poloha");
+        }
+
+        async function startHlas() {
+            const status = document.getElementById('status');
+            const seznam = document.getElementById('vysledky');
+            const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!Speech) return alert("Zkus Chrome.");
+            const recognition = new Speech();
+            recognition.lang = 'cs-CZ';
+            status.innerText = "🔴 Poslouchám...";
+            recognition.start();
+
+            recognition.onresult = async (event) => {
+                // Bezpečné získání textu z hlasu napříč verzemi prohlížečů
+                let text = "";
+                if (event.results[0] && event.results[0][0]) {
+                    text = event.results[0][0].transcript;
+                } else if (event.results.transcript) {
+                    text = event.results.transcript;
+                }
+                
+                // Očištění od teček na konci vět
+          text = text.replace(/[.]/g, "").trim().toLowerCase();
+status.innerText = `Hledám: "${text}"`;
+
+
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    initMap(latitude, longitude);
+                    try {
+                        // Volání tvého API na Renderu
+                        const res = await fetch(`/api/hledej?zbozi=${encodeURIComponent(text)}&lat=${latitude}&lng=${longitude}`);
+                        const data = await res.json();
+                        
+                        // Vyčištění starých špendlíků
+                        markers.forEach(m => map.removeLayer(m));
+                        markers = [];
+                        seznam.innerHTML = "";
+
+                        if (data && data.length > 0) {
+                            data.forEach(p => {
+                                // 1. Konstrukce adresy pro Google Mapy
+                            const googleAdresa = "google.com";
+const cilovaPoloha = "&destination=" + p.lat + "," + p.lng;
+const navigaceUrl = googleAdresa + cilovaPoloha;
+
+                                // 2. Vykreslení karty se správnými proměnnými ze Supabase RPC funkce
+                        // ... předchozí kód s navigaceUrl ...
+
+seznam.innerHTML += `
+    <div class="prodejce-karta" style="display: flex; align-items: center; gap: 15px;">
+        <!-- LEVÁ STRANA: Obrázek produktu -->
+        <img src="${p.obrazek_url || 'placeholder.com'}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 10px;" alt="produkt">
+        
+        <!-- PRAVÁ STRANA: Textové informace -->
+        <div>
+            <strong>📍 ${p.prodejce_jmeno}</strong><br>
+            📦 ${p.nazev_produktu}<br>
+            💰 <strong>Cena: ${p.cena} Kč</strong><br>
+            📞 <a href="tel:${p.telefon}">${p.telefon || 'neuveden'}</a><br>
+            <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Navigovat</a>
+        </div>
+    </div>`;
+
+
+                                // 3. Přidání špendlíku prodejce na Leaflet mapu
+                                if (p.lat && p.lng) {
+                                    const m = L.marker([p.lat, p.lng])
+                                        .addTo(map)
+                                        .bindPopup(`<b>${p.prodejce_jmeno}</b><br>${p.nazev_produktu}<br>${p.cena} Kč`);
+                                    markers.push(m);
+                                }
+                            });
+
+                            // Vycentrování mapy na nalezené obchody
+                            const group = new L.featureGroup(markers);
+                            if (markers.length > 0) map.fitBounds(group.getBounds().pad(0.2));
+                        } else {
+                            seznam.innerText = "Nic nenalezeno.";
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        status.innerText = "Chyba při hledání.";
+                    }
+                });
+            };
+        }
+    </script>
+</body>
+</html>

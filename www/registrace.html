@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrace - Kuryr</title>
+    <style>
+        :root { --primary: #28a745; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 100%; max-width: 400px; text-align: center; }
+        h1 { color: var(--primary); }
+        input { width: 100%; padding: 15px; margin: 10px 0; border: 1px solid #ddd; border-radius: 12px; box-sizing: border-box; }
+        button { width: 100%; padding: 18px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; }
+        .back-btn { background: #6c757d; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>📍 Nový prodejce</h1>
+        <input type="text" id="jmeno" placeholder="Název prodejny">
+        <input type="text" id="nabidka" placeholder="Co prodáváte?">
+        <input type="text" id="telefon" placeholder="Telefonní číslo">
+        <button onclick="ulozit()">Zaregistrovat polohu</button>
+        <button onclick="window.location.href='/'" class="back-btn">Zpět</button>
+        <p id="stav"></p>
+    </div>
+
+    <script>
+        async function ulozit() {
+            const stav = document.getElementById('stav');
+            const data = {
+                jmeno: document.getElementById('jmeno').value,
+                nabidka: document.getElementById('nabidka').value,
+                telefon: document.getElementById('telefon').value
+            };
+            stav.innerText = "⏳ Zjišťuji polohu...";
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const res = await fetch('/api/registrovat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({...data, lat: pos.coords.latitude, lng: pos.coords.longitude})
+                });
+                if (res.ok) {
+                    stav.innerText = "✅ Uloženo! Přesměrovávám...";
+                    setTimeout(() => window.location.href = "/", 1500);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+

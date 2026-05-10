@@ -93,10 +93,11 @@
                          // OPRAVENO: Přidán protokol https:// a správná cesta pro plánování trasy /maps/dir/
 // Rozdělení adresy tak, aby ji mobil vzal jako internetový odkaz a chat ji nezmrzačil
 // TENTO ZÁPIS JE PRO MOBILNÍ TELEFONY NEPRŮSTŘELNÝ A CHAT HO NEZKRESLÍ
-const mapaUrlObjekt = new URL("google.com");
-mapaUrlObjekt.searchParams.append("api", "1");
-mapaUrlObjekt.searchParams.append("destination", p.lat + "," + p.lng);
-const navigaceUrl = mapaUrlObjekt.toString();
+// Rozdělíme adresu tak, aby v ní mobil viděl jasný internetový odkaz a chat ji nezkrátil
+const prot = "https://";
+const dome = "google.com";
+const path = "/maps/dir/?api=1";
+const navigaceUrl = prot + dome + path + "&destination=" + p.lat + "," + p.lng;
 
 
                             // OPRAVENO: Čisté vykreslení kartičky bez zapomenutých testovacích komentářů

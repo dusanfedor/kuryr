@@ -53,19 +53,24 @@ app.get('/api/hledej', async (req, res) => {
 
 
 // 3. API pro registraci
+// 3. API pro registraci nového prodejce
 app.post('/api/registrovat', async (req, res) => {
     const { jmeno, nabidka, lat, lng, telefon } = req.body;
-    const { data, error } = await supabase
-        .from('prodejci')
-        .insert([{ jmeno, nabidka, telefon, poloha: `POINT(${lng} ${lat})` }]);
     
-    if (error) return res.status(500).json(error);
-    res.json({ success: true });
+    try {
+        const { data, error } = await supabase
+            .from('prodejci')
+            .insert([{ jmeno, nabidka, telefon, poloha: `POINT(${lng} ${lat})` }]);
+        
+        if (error) return res.status(500).json(error);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Chyba registrace' });
+    }
 });
+
 // 4. API pro odeslání objednávky a zprávy kurýrům
 app.post('/api/objednat', async (req, res) => {
-    const { produkt_id, prodejce_id, zprava } = req.body;
-    app.post('/api/regitrovat', async (req, res) => {
     const { produkt_id, prodejce_id, zprava } = req.body;
 
     console.log(`[LOG OBJEDNÁVKA] Nový nákup! Produkt ID: ${produkt_id}, Zpráva: "${zprava}"`);
@@ -95,6 +100,7 @@ app.post('/api/objednat', async (req, res) => {
         res.status(500).json({ error: 'Selhalo odeslání kurýrům' });
     }
 });
+
 
 
 const port = process.env.PORT || 3000;

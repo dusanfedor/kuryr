@@ -91,11 +91,11 @@
                         data.forEach(p => {
                             // OPRAVENO: Bezpečné rozdělení adresy Google Maps, které se v chatu nezkrátí
                          // OPRAVENO: Přidán protokol https:// a správná cesta pro plánování trasy /maps/dir/
-const castProtokol = "https://www.";
-const castDomena = "google.com";
-const castParametry = "/maps/dir/?api=1";
-const navigaceUrl = castProtokol + castDomena + castParametry + "&destination=" + p.lat + "," + p.lng;
-
+// Rozdělení adresy tak, aby ji mobil vzal jako internetový odkaz a chat ji nezmrzačil
+const startAdresy = "https://";
+const stredAdresy = "google.com";
+const cestaAdresy = "/maps/dir/?api=1";
+const navigaceUrl = startAdresy + stredAdresy + cestaAdresy + "&destination=" + p.lat + "," + p.lng;
 
 
 

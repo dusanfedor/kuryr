@@ -25,7 +25,11 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 // TRASY PRO ZÁKAZNÍKY
 // ==========================================
 
-// NEPRŮSTŘELNÁ OPRAVA: Čistá doména bez parametrů VŽDY otevře vyhledávač index.html
+// ==========================================
+// TRASY PRO ZÁKAZNÍKY
+// ==========================================
+
+// 1. Čistá doména bez parametrů natvrdo otevře zákaznický vyhledávač
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'www', 'index.html'));
 });
@@ -35,6 +39,7 @@ app.get('/api/hledej', async (req, res) => {
     let { zbozi } = req.query;
     
     if (zbozi) {
+        // Odstraní uvozovky, tečky, čárky a převede na malá písmena
         zbozi = zbozi.replace(/["'„“.]/g, "").trim().toLowerCase();
     } else {
         zbozi = "";

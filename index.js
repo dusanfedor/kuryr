@@ -10,7 +10,14 @@ const supabaseUrl = 'https://egqytbxxhcmafzqkiogd.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVncXl0Ynh4aGNtYWZ6cWtpb2dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzM0MzEsImV4cCI6MjA5MzgwOTQzMX0.rmUculPKT_xsYf1uFY8ubq3x5mSF_nahMEQwL9uHcsY';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Statické soubory ze složky www s vypnutou mezipamětí pro okamžité aktualizace v mobilech
+// ==========================================
+// TADY JE TA OPRAVA: HLAVNÍ TRASA MÁ ABSOLUTNÍ PŘEDNOST!
+// ==========================================
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'www', 'index.html'));
+});
+
+// Statické soubory ze složky www s vypnutou mezipamětí jsou až POD NÍ
 app.use(express.static(path.join(__dirname, 'www'), {
     setHeaders: (res, path) => {
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');

@@ -62,6 +62,40 @@ app.post('/api/registrovat', async (req, res) => {
     if (error) return res.status(500).json(error);
     res.json({ success: true });
 });
+// 4. API pro odeslání objednávky a zprávy kurýrům
+app.post('/api/objednat', async (req, res) => {
+    const { produkt_id, prodejce_id, zprava } = req.body;
+    app.post('/api/regitrovat', async (req, res) => {
+    const { produkt_id, prodejce_id, zprava } = req.body;
+
+    console.log(`[LOG OBJEDNÁVKA] Nový nákup! Produkt ID: ${produkt_id}, Zpráva: "${zprava}"`);
+
+    try {
+        // Zápis do nové tabulky objednávek v Supabase
+        const { data, error } = await supabase
+            .from('objednavky')
+            .insert([
+                { 
+                    produkt_id: produkt_id, 
+                    prodejce_id: prodejce_id, 
+                    zprava_pro_kuryra: zprava 
+                }
+            ])
+            .select();
+
+        if (error) {
+            console.error('[LOG OBJEDNÁVKA] Chyba zápisu:', error.message);
+            return res.status(500).json({ error: error.message });
+        }
+
+        console.log('[LOG OBJEDNÁVKA] Zpráva pro kurýry úspěšně uložena.');
+        res.json({ success: true, objednavka: data[0] });
+    } catch (err) {
+        console.error('[LOG OBJEDNÁVKA] Kritická chyba:', err);
+        res.status(500).json({ error: 'Selhalo odeslání kurýrům' });
+    }
+});
+
 
 const port = process.env.PORT || 3000;
 app.listen(port, '0.0.0.0', () => {

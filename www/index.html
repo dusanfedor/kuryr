@@ -13,7 +13,7 @@
         .container { width: 100%; max-width: 500px; padding: 20px; text-align: center; }
         .btn-voice { width: 100%; padding: 20px; background: var(--primary); color: white; border: none; border-radius: 15px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin-top: 20px; }
         #map { height: 300px; width: 100%; border-radius: 15px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: none; }
-        .prodejce-karta { background: white; border-radius: 15px; padding: 15px; margin-top: 10px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .prodejce-karta { background: white; border-radius: 15px; padding: 15px; margin-top: 10px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 15px; }
         .nav-btn { display: inline-block; margin-top: 10px; padding: 10px 15px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: bold; }
         #status { height: 25px; margin-top: 20px; color: #666; }
     </style>
@@ -55,7 +55,6 @@
             recognition.start();
 
             recognition.onresult = async (event) => {
-                // Bezpečné získání textu z hlasu napříč verzemi prohlížečů
                 let text = "";
                 if (event.results[0] && event.results[0][0]) {
                     text = event.results[0][0].transcript;
@@ -63,70 +62,68 @@
                     text = event.results.transcript;
                 }
                 
-                // Očištění od teček na konci vět
-          text = text.replace(/[.]/g, "").trim().toLowerCase();
-status.innerText = `Hledám: "${text}"`;
+                let textCisty = text.replace(/[.]/g, "").trim().toLowerCase();
+                status.innerText = `Hledám: "${textCisty}"`;
 
+                // Výchozí souřadnice (Holešovice), pokud mobil nepovolí GPS okamžitě
+                let latitude = 50.1015;
+                let longitude = 14.4455;
+                initMap(latitude, longitude);
 
-                navigator.geolocation.getCurrentPosition(async (pos) => {
-                    const { latitude, longitude } = pos.coords;
-                    initMap(latitude, longitude);
-                    try {
-                        // Volání tvého API na Renderu
-                        const res = await fetch(`/api/hledej?zbozi=${encodeURIComponent(text)}&lat=${latitude}&lng=${longitude}`);
-                        const data = await res.json();
-                        
-                        // Vyčištění starých špendlíků
-                        markers.forEach(m => map.removeLayer(m));
-                        markers = [];
-                        seznam.innerHTML = "";
+                // Zjišťování polohy běží asynchronně na pozadí, nebrzdí vyhledávání produktů
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition((pos) => {
+                        latitude = pos.coords.latitude;
+                        longitude = pos.coords.longitude;
+                        initMap(latitude, longitude);
+                    }, (err) => console.log("GPS nepovolena, používám fixní střed."));
+                }
 
-                        if (data && data.length > 0) {
-                            data.forEach(p => {
-                                // 1. Konstrukce adresy pro Google Mapy
-                            const googleAdresa = "google.com";
-const cilovaPoloha = "&destination=" + p.lat + "," + p.lng;
-const navigaceUrl = googleAdresa + cilovaPoloha;
+                try {
+                    const res = await fetch(`/api/hledej?zbozi=${encodeURIComponent(textCisty)}&lat=${latitude}&lng=${longitude}`);
+                    const data = await res.json();
+                    
+                    markers.forEach(m => map.removeLayer(m));
+                    markers = [];
+                    seznam.innerHTML = "";
 
-                                // 2. Vykreslení karty se správnými proměnnými ze Supabase RPC funkce
-                        // ... předchozí kód s navigaceUrl ...
+                    if (data && data.length > 0) {
+                        data.forEach(p => {
+                            // OPRAVENO: Bezpečné rozdělení adresy Google Maps, které se v chatu nezkrátí
+                            const webMaps = "google.com";
+                            const cilCesty = "&destination=" + p.lat + "," + p.lng;
+                            const navigaceUrl = webMaps + cilCesty;
 
-seznam.innerHTML += `
-    <div class="prodejce-karta" style="display: flex; align-items: center; gap: 15px;">
-        <!-- LEVÁ STRANA: Obrázek produktu -->
-        <img src="${p.obrazek_url || 'placeholder.com'}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 10px;" alt="produkt">
-        
-        <!-- PRAVÁ STRANA: Textové informace -->
-        <div>
-            <strong>📍 ${p.prodejce_jmeno}</strong><br>
-            📦 ${p.nazev_produktu}<br>
-            💰 <strong>Cena: ${p.cena} Kč</strong><br>
-            📞 <a href="tel:${p.telefon}">${p.telefon || 'neuveden'}</a><br>
-            <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Navigovat</a>
-        </div>
-    </div>`;
+                            // OPRAVENO: Čisté vykreslení kartičky bez zapomenutých testovacích komentářů
+                            seznam.innerHTML += `
+                                <div class="prodejce-karta">
+                                    <img src="${p.obrazek_url || 'placeholder.com'}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 10px;" alt="produkt">
+                                    <div>
+                                        <strong>📍 ${p.prodejce_jmeno}</strong><br>
+                                        📦 ${p.nazev_produktu}<br>
+                                        💰 <strong>Cena: ${p.cena} Kč</strong><br>
+                                        📞 <a href="tel:${p.telefon}">${p.telefon || 'neuveden'}</a><br>
+                                        <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Navigovat</a>
+                                    </div>
+                                </div>`;
 
+                            if (p.lat && p.lng) {
+                                const m = L.marker([p.lat, p.lng])
+                                    .addTo(map)
+                                    .bindPopup(`<b>${p.prodejce_jmeno}</b><br>${p.nazev_produktu}`);
+                                markers.push(m);
+                            }
+                        });
 
-                                // 3. Přidání špendlíku prodejce na Leaflet mapu
-                                if (p.lat && p.lng) {
-                                    const m = L.marker([p.lat, p.lng])
-                                        .addTo(map)
-                                        .bindPopup(`<b>${p.prodejce_jmeno}</b><br>${p.nazev_produktu}<br>${p.cena} Kč`);
-                                    markers.push(m);
-                                }
-                            });
-
-                            // Vycentrování mapy na nalezené obchody
-                            const group = new L.featureGroup(markers);
-                            if (markers.length > 0) map.fitBounds(group.getBounds().pad(0.2));
-                        } else {
-                            seznam.innerText = "Nic nenalezeno.";
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        status.innerText = "Chyba při hledání.";
+                        const group = new L.featureGroup(markers);
+                        if (markers.length > 0) map.fitBounds(group.getBounds().pad(0.2));
+                    } else {
+                        seznam.innerText = "Nic nenalezeno.";
                     }
-                });
+                } catch (e) {
+                    console.error(e);
+                    status.innerText = "Chyba při hledání.";
+                }
             };
         }
     </script>

@@ -150,6 +150,30 @@ app.get('/api/kuryr/objednavky', async (req, res) => {
 app.get('/kuryr.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'www', 'kuryr.html'));
 });
+// 6. API pro kurýry - označí objednávku jako doručenou (změní stav v Supabase)
+app.post('/api/kuryr/doruceno', async (req, res) => {
+    const { objednavka_id } = req.body;
+    console.log(`[KURYR API] Zakázka ID: ${objednavka_id} byla doručena.`);
+
+    try {
+        // Aktualizujeme stav řádku v Supabase
+        const { data, error } = await supabase
+            .from('objednavky')
+            .update({ stav: 'Doručeno' })
+            .eq('id', objednavka_id)
+            .select();
+
+        if (error) {
+            console.error('[KURYR API] Chyba změny stavu:', error.message);
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[KURYR API] Kritická chyba při doručení:', err);
+        res.status(500).json({ error: 'Selhal zápis doručení' });
+    }
+});
 
 // ==========================================
 // SAMOTNÝ START SERVERU (Úplný konec souboru)

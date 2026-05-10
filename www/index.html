@@ -3,172 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuryr - Vyhledávání a Objednávky</title>
+    <title>Kurýrní Tržiště - Aktivní zakázky</title>
     <link rel="icon" href="data:,">
-    <link id="map-css" rel="stylesheet" href="data:text/css," />
-    <script id="map-js"></script>
+    <link id="kuryr-css" rel="stylesheet" href="data:text/css," />
+    <script id="kuryr-js"></script>
     <style>
-        :root { --primary: #28a745; --bg: #f8f9fa; --dark: #343a40; }
-        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        .container { width: 100%; max-width: 500px; padding: 20px; text-align: center; box-sizing: border-box; }
-        .btn-voice { width: 100%; padding: 20px; background: var(--primary); color: white; border: none; border-radius: 15px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        #map { height: 300px; width: 100%; border-radius: 15px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: none; }
-        .prodejce-karta { background: white; border-radius: 15px; padding: 15px; margin-top: 15px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .card-content { margin-bottom: 12px; }
-        .nav-btn { display: inline-block; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: bold; margin-right: 5px; }
-        .order-section { margin-top: 15px; padding-top: 12px; border-top: 1px dashed #ccc; }
-        .order-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 0.9rem; margin-bottom: 8px; }
-        .btn-order { width: 100%; padding: 10px; background: #ffc107; color: var(--dark); border: none; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; }
-        .btn-order:hover { background: #e0a800; }
-        #status { height: 25px; margin-top: 20px; color: #666; font-weight: 500; }
+        :root { --primary: #007bff; --bg: #f8f9fa; --dark: #343a40; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; }
+        .header { background: var(--dark); color: white; width: 100%; padding: 15px; text-align: center; font-weight: bold; font-size: 1.2rem; }
+        .container { width: 100%; max-width: 500px; padding: 15px; box-sizing: border-box; }
+        #map { height: 250px; width: 100%; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .zakazka-karta { background: white; border-radius: 15px; padding: 15px; margin-bottom: 12px; border-left: 6px solid #ffc107; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .btn-prijmout { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 0.95rem; }
+        .btn-hotovo { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 8px; font-size: 0.95rem; }
+        .zprava-box { background: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; margin-top: 8px; font-style: italic; border: 1px solid #ffeeba; }
     </style>
 </head>
 <body>
+    <div class="header">🚗 KURÝRNÍ DISPEČINK (Holešovice)</div>
     <div class="container">
-        <div id="status">Připraveno</div> 
-        <button class="btn-voice" onclick="startHlas()">🎤 Hledat hlasem</button>
         <div id="map"></div>
-        <div id="vysledky"></div>
+        <div id="seznam-zakazek">Načítám volné nákupy...</div>
     </div>
 
     <script>
-        // Bezpečné sestavení adres pro mobilní telefony, které chat neumí zkrátit
-        const cdnProtokol = "https://";
-        const cdnDomena = "unpkg.com";
-        const cdnCesta = "/leaflet@1.9.4/dist/";
-
-        document.getElementById("map-css").href = cdnProtokol + cdnDomena + cdnCesta + "leaflet.css";
-        document.getElementById("map-js").src = cdnProtokol + cdnDomena + cdnCesta + "leaflet.js";
+        const prot = "https://";
+        const dome = "unpkg.com";
+        const path = "/leaflet@1.9.4/dist/";
+        document.getElementById("kuryr-css").href = prot + dome + path + "leaflet.css";
+        document.getElementById("kuryr-js").src = prot + dome + path + "leaflet.js";
 
         let map;
         let markers = [];
-        let mojePoloha;
 
-        function initMap(lat, lng) {
-            const mapEl = document.getElementById('map');
-            mapEl.style.display = 'block';
-            if (!map) {
-                map = L.map('map').setView([lat, lng], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            } else {
-                map.setView([lat, lng], 13);
-            }
-            if (mojePoloha) map.removeLayer(mojePoloha);
-            mojePoloha = L.circle([lat, lng], { color: 'blue', fillColor: '#30f', fillOpacity: 0.4, radius: 30 }).addTo(map).bindPopup("Tvoje poloha");
+        function initMap() {
+            map = L.map('map').setView([50.1015, 14.4455], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         }
 
-        async function odeslatKuryrum(produktId, prodejceId) {
-            const zpravaInput = document.getElementById(`msg-${produktId}`);
-            const zpravaText = zpravaInput ? zpravaInput.value.trim() : "";
-
-            if (!zpravaText) {
-                return alert("Před přivoláním kurýra prosím napište vzkaz (např. kód vyzvednutí, číslo kasy)!");
-            }
+        async function dokoncitZakazku(objednavkaId) {
+            if (!confirm("Opravdu chcete tuto zakázku označit jako DORUČENOU? Zmizí z dispečinku.")) return;
 
             try {
-                const res = await fetch('/api/objednat', {
+                const res = await fetch('/api/kuryr/doruceno', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        produkt_id: produktId,
-                        prodejce_id: prodejceId,
-                        zprava: zpravaText
-                    })
+                    body: JSON.stringify({ objednavka_id: objednavkaId })
                 });
 
                 const vysledek = await res.json();
                 if (vysledek.success) {
-                    alert("🎉 Nákup zaplacen a zpráva byla odeslána kurýrům! Sledujte mapu.");
-                    if (zpravaInput) zpravaInput.value = "";
+                    alert("🎉 Zakázka byla úspěšně uzavřena a doručena!");
+                    nactiZakazky(); // Okamžitě překreslí mapu dispečinku bez čekání
                 } else {
-                    alert("Chyba při odesílání objednávky: " + (vysledek.error || "Neznámá chyba"));
+                    alert("Chyba při dokončení: " + vysledek.error);
                 }
             } catch (err) {
                 console.error(err);
-                alert("Selhalo spojení se serverem při odesílání kurýrovi.");
+                alert("Selhalo spojení s dispečinkem.");
             }
         }
 
-        async function startHlas() {
-            const status = document.getElementById('status');
-            const seznam = document.getElementById('vysledky');
-            const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!Speech) return alert("Zkus Chrome.");
+        async function nactiZakazky() {
+            const seznam = document.getElementById('seznam-zakazek');
             
-            const recognition = new Speech();
-            recognition.lang = 'cs-CZ';
-            status.innerText = "🔴 Poslouchám...";
-            recognition.start();
+            try {
+                const res = await fetch('/api/kuryr/objednavky');
+                const objednavky = await res.json();
 
-            recognition.onresult = async (event) => {
-                let hlasovyText = "";
-                if (event.results && event.results[0] && event.results[0][0]) {
-                    hlasovyText = event.results[0][0].transcript;
+                markers.forEach(m => map.removeLayer(m));
+                markers = [];
+                seznam.innerHTML = "";
+
+                if (objednavky.length === 0) {
+                    seznam.innerHTML = "<div style='text-align:center;color:#666;margin-top:20px;'>Aktuálně žádné nákupy nečekají na odvoz. Svět je bez práce!</div>";
+                    return;
                 }
-                
-                let textCisty = hlasovyText.replace(/[.]/g, "").trim().toLowerCase();
-                status.innerText = `Hledám: "${textCisty}"`;
 
-                let latitude = 50.1015;
-                let longitude = 14.4455;
-                initMap(latitude, longitude);
+                objednavky.forEach(o => {
+                    const startAdresy = "https://";
+                    const stredAdresy = "google.com";
+                    const cestaAdresy = "/maps/dir/?api=1";
+                    const navUrl = startAdresy + stredAdresy + cestaAdresy + "&destination=" + o.lat + "," + o.lng;
 
-                try {
-                    const res = await fetch(`/api/hledej?zbozi=${encodeURIComponent(textCisty)}&lat=${latitude}&lng=${longitude}`);
-                    const data = await res.json();
-                    
-                    markers.forEach(m => map.removeLayer(m));
-                    markers = [];
-                    seznam.innerHTML = "";
+                    seznam.innerHTML += `
+                        <div class="zakazka-karta">
+                            <strong>🏪 Obchod: ${o.prodejce_jmeno}</strong><br>
+                            📦 Zboží: ${o.produkt_nazev} (${o.produkt_cena} Kč)<br>
+                            📞 Tel na prodejnu: <a href="tel:${o.prodejce_telefon}">${o.prodejce_telefon}</a>
+                            
+                            <div class="zprava-box">
+                                💬 <b>Vzkaz od zákazníka:</b> "${o.zprava}"
+                            </div>
+                            
+                            <button class="btn-prijmout" onclick="window.open('${navUrl}', '_blank')">🚗 Spustit navigaci k obchodu</button>
+                            <!-- NOVÉ TLAČÍTKO PRO UKONČENÍ STRÁNKY -->
+                            <button class="btn-hotovo" onclick="dokoncitZakazku(${o.id})">✅ Označit jako doručeno</button>
+                        </div>`;
 
-                    if (data && data.length > 0) {
-                        data.forEach(p => {
-                            const prot = "https://";
-                            const dome = "google.com";
-                            const path = "/maps/dir/?api=1";
-                            const navigaceUrl = prot + dome + path + "&destination=" + p.lat + "," + p.lng;
+                    const m = L.marker([o.lat, o.lng])
+                        .addTo(map)
+                        .bindPopup(`<b>${o.prodejce_jmeno}</b><br>${o.produkt_nazev}`);
+                    markers.push(m);
+                });
 
-                            // Generování objednávkové sekce pouze pro reálné XML produkty (ID není 0)
-                            let objednavkaHtml = "";
-                            if (p.produkt_id && p.produkt_id !== "0" && p.produkt_id !== 0) {
-                                objednavkaHtml = `
-                                    <div class="order-section">
-                                        <input type="text" id="msg-${p.produkt_id}" class="order-input" placeholder="Vzkaz kurýrovi (např: Kasa 2, PIN: 1234)...">
-                                        <button class="btn-order" onclick="odeslatKuryrum(${p.produkt_id}, '${p.prodejce_id}')">💳 Koupit & volat kurýra</button>
-                                    </div>`;
-                            }
+                const group = new L.featureGroup(markers);
+                if (markers.length > 0) map.fitBounds(group.getBounds().pad(0.3));
 
-                            seznam.innerHTML += `
-                                <div class="prodejce-karta">
-                                    <div class="card-content">
-                                        <strong>📍 ${p.prodejce_jmeno || 'Obchod'}</strong><br>
-                                        📦 ${p.nazev_produktu || 'Zboží'}<br>
-                                        💰 <strong>Cena: ${p.cena || 0} Kč</strong><br>
-                                        📞 <a href="tel:${p.telefon}">${p.telefon || 'neuveden'}</a><br><br>
-                                        <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Navigovat</a>
-                                    </div>
-                                    ${objednavkaHtml}
-                                </div>`;
-
-                            if (p.lat && p.lng) {
-                                const m = L.marker([p.lat, p.lng])
-                                    .addTo(map)
-                                    .bindPopup(`<b>${p.prodejce_jmeno}</b><br>${p.nazev_produktu}`);
-                                markers.push(m);
-                            }
-                        });
-
-                        const group = new L.featureGroup(markers);
-                        if (markers.length > 0) map.fitBounds(group.getBounds().pad(0.2));
-                    } else {
-                        seznam.innerText = "Nic nenalezeno.";
-                    }
-                } catch (e) {
-                    console.error(e);
-                    status.innerText = "Chyba při vyhledávání.";
-                }
-            };
+            } catch (err) {
+                console.error(err);
+                seznam.innerText = "Chyba komunikace s dispečinkem.";
+            }
         }
+
+        window.onload = () => {
+            initMap();
+            nactiZakazky();
+            setInterval(nactiZakazky, 10000);
+        };
     </script>
 </body>
 </html>

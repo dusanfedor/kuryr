@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kuryr - Vyhledávání na mapě</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="jsdelivr.net" /> 
-    <script src="jsdelivr.net"></script>
+        <link id="map-css" rel="stylesheet" href="data:text/css," />
+    <script id="map-js"></script>
+
     <style>
         :root { --primary: #28a745; --bg: #f8f9fa; }
         body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
@@ -27,6 +28,14 @@
     </div>
 
     <script>
+        // Bezpečné sestavení adres pro mobilní telefony, které chat neumí zkrátit
+const cdnProtokol = "https://";
+const cdnDomena = "unpkg.com";
+const cdnCesta = "/leaflet@1.9.4/dist/";
+
+document.getElementById("map-css").href = cdnProtokol + cdnDomena + cdnCesta + "leaflet.css";
+document.getElementById("map-js").src = cdnProtokol + cdnDomena + cdnCesta + "leaflet.js";
+
         let map;
         let markers = [];
         let mojePoloha;

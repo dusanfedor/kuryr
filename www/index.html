@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kuryr - Vyhledávání na mapě</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" /> 
-    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="jsdelivr.net" /> 
+    <script src="jsdelivr.net"></script>
     <style>
         :root { --primary: #28a745; --bg: #f8f9fa; }
         body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
@@ -49,65 +49,51 @@
             const seznam = document.getElementById('vysledky');
             const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!Speech) return alert("Zkus Chrome.");
+            
             const recognition = new Speech();
             recognition.lang = 'cs-CZ';
             status.innerText = "🔴 Poslouchám...";
             recognition.start();
 
             recognition.onresult = async (event) => {
-                let text = "";
-                if (event.results[0] && event.results[0][0]) {
-                    text = event.results[0][0].transcript;
-                } else if (event.results.transcript) {
-                    text = event.results.transcript;
+                let hlasovyText = "";
+                if (event.results && event.results[0] && event.results[0][0]) {
+                    hlasovyText = event.results[0][0].transcript;
                 }
                 
-                let textCisty = text.replace(/[.]/g, "").trim().toLowerCase();
+                let textCisty = hlasovyText.replace(/[.]/g, "").trim().toLowerCase();
                 status.innerText = `Hledám: "${textCisty}"`;
 
-                // Výchozí souřadnice (Holešovice), pokud mobil nepovolí GPS okamžitě
+                // Výchozí souřadnice Holešovic pro stabilní zobrazení mapy
                 let latitude = 50.1015;
                 let longitude = 14.4455;
                 initMap(latitude, longitude);
 
-                // Zjišťování polohy běží asynchronně na pozadí, nebrzdí vyhledávání produktů
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition((pos) => {
-                        latitude = pos.coords.latitude;
-                        longitude = pos.coords.longitude;
-                        initMap(latitude, longitude);
-                    }, (err) => console.log("GPS nepovolena, používám fixní střed."));
-                }
-
                 try {
+                    // Volání API na Renderu
                     const res = await fetch(`/api/hledej?zbozi=${encodeURIComponent(textCisty)}&lat=${latitude}&lng=${longitude}`);
                     const data = await res.json();
                     
+                    // Vyčištění staré mapy
                     markers.forEach(m => map.removeLayer(m));
                     markers = [];
                     seznam.innerHTML = "";
 
                     if (data && data.length > 0) {
                         data.forEach(p => {
-                            // OPRAVENO: Bezpečné rozdělení adresy Google Maps, které se v chatu nezkrátí
-                         // OPRAVENO: Přidán protokol https:// a správná cesta pro plánování trasy /maps/dir/
-// Rozdělení adresy tak, aby ji mobil vzal jako internetový odkaz a chat ji nezmrzačil
-// TENTO ZÁPIS JE PRO MOBILNÍ TELEFONY NEPRŮSTŘELNÝ A CHAT HO NEZKRESLÍ
-// Rozdělíme adresu tak, aby v ní mobil viděl jasný internetový odkaz a chat ji nezkrátil
-const prot = "https://";
-const dome = "google.com";
-const path = "/maps/dir/?api=1";
-const navigaceUrl = prot + dome + path + "&destination=" + p.lat + "," + p.lng;
+                            // Sestavení URL navigace z bezpečných kousků (řeší Cannot GET na mobilu)
+                            const prot = "https://";
+                            const dome = "google.com";
+                            const path = "/maps/dir/?api=1";
+                            const navigaceUrl = prot + dome + path + "&destination=" + p.lat + "," + p.lng;
 
-
-                            // OPRAVENO: Čisté vykreslení kartičky bez zapomenutých testovacích komentářů
+                            // Vykreslení karty prodejce
                             seznam.innerHTML += `
                                 <div class="prodejce-karta">
-                                    <img src="${p.obrazek_url || 'placeholder.com'}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 10px;" alt="produkt">
-                                    <div>
-                                        <strong>📍 ${p.prodejce_jmeno}</strong><br>
-                                        📦 ${p.nazev_produktu}<br>
-                                        💰 <strong>Cena: ${p.cena} Kč</strong><br>
+                                    <div style="flex-grow: 1;">
+                                        <strong>📍 ${p.prodejce_jmeno || 'Obchod'}</strong><br>
+                                        📦 ${p.nazev_produktu || 'Zboží'}<br>
+                                        💰 <strong>Cena: ${p.cena || 0} Kč</strong><br>
                                         📞 <a href="tel:${p.telefon}">${p.telefon || 'neuveden'}</a><br>
                                         <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Navigovat</a>
                                     </div>
@@ -128,7 +114,7 @@ const navigaceUrl = prot + dome + path + "&destination=" + p.lat + "," + p.lng;
                     }
                 } catch (e) {
                     console.error(e);
-                    status.innerText = "Chyba při hledání.";
+                    status.innerText = "Chyba při vyhledávání.";
                 }
             };
         }

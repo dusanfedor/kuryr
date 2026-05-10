@@ -21,6 +21,15 @@ app.use(express.json());
 // Oprava favicon chyby (vrátí 'No Content')
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
+// ==========================================
+// TRASY PRO ZÁKAZNÍKY
+// ==========================================
+
+// NEPRŮSTŘELNÁ OPRAVA: Čistá doména bez parametrů VŽDY otevře vyhledávač index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'www', 'index.html'));
+});
+
 // 2. API pro hledání produktů i s polohou prodejce
 app.get('/api/hledej', async (req, res) => {
     let { zbozi } = req.query;
@@ -58,7 +67,7 @@ app.post('/api/registrovat', async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('prodejci')
-            .insert([{ jmeno, nabidka, telefon, poloha: `POINT(${lng} ${lat})` }]);
+            .insert([{ jmeno, nabidka, telephone: telefon, poloha: `POINT(${lng} ${lat})` }]);
         
         if (error) return res.status(500).json(error);
         res.json({ success: true });
@@ -113,7 +122,7 @@ app.get('/api/kuryr/objednavky', async (req, res) => {
                 zprava_pro_kuryra,
                 vytvoreno_at,
                 produkty ( nazev, cena ),
-                prodejci ( jmeno, telephone:telefon, poloha )
+                prodejci ( jmeno, telefon, poloha )
             `)
             .eq('stav', 'Čeká na vyzvednutí');
 
@@ -128,7 +137,7 @@ app.get('/api/kuryr/objednavky', async (req, res) => {
                 produkt_nazev: o.produkty ? o.produkty.nazev : 'Neznámé zboží',
                 produkt_cena: o.produkty ? o.produkty.cena : 0,
                 prodejce_jmeno: o.prodejci ? o.prodejci.jmeno : 'Neznámý obchod',
-                prodejce_telefon: o.prodejci ? o.prodejci.telephone : '',
+                prodejce_telefon: o.prodejci ? o.prodejci.telefon : '',
                 lat: 50.1015,
                 lng: 14.4455
             };

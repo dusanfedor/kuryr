@@ -101,7 +101,50 @@ app.post('/api/objednat', async (req, res) => {
     }
 });
 
+// 5. API pro kurýry - vrátí všechny objednávky, které čekají na odvoz, i s polohou obchodu
+app.get('/api/kuryr/objednavky', async (req, res) => {
+    console.log('[KURYR API] Načítám objednávky pro řidiče...');
+    
+    try {
+        const { data, error } = await supabase
+            .from('objednavky')
+            .select(`
+                id,
+                stav,
+                zprava_pro_kuryra,
+                vytvoreno_at,
+                produkty ( nazev, cena ),
+                prodejci ( jmeno, telefon, poloha )
+            `)
+            .eq('stav', 'Čeká na vyzvednutí'); // Kurýr vidí jen ty, které ještě nikdo neodvezl
 
+        if (error) throw error;
+        
+        // Převedeme PostGIS polohu z databáze na čistá čísla lat/lng pro mapu v telefonu kurýra
+        const vycistenaData = data.map(o => {
+            let lat = 50.1015;
+            let lng = 14.4455;
+            
+            return {
+                id: o.id,
+                stav: o.stav,
+                zprava: o.zprava_pro_kuryra,
+                cas: o.vytvoreno_at,
+                produkt_nazev: o.produkty ? o.produkty.nazev : 'Neznámé zboží',
+                produkt_cena: o.produkty ? o.produkty.cena : 0,
+                prodejce_jmeno: o.prodejci ? o.prodejci.jmeno : 'Neznámý obchod',
+                prodejce_telefon: o.prodejci ? o.prodejci.telefon : '',
+                lat: lat,
+                lng: lng
+            };
+        });
+
+        res.json(vycistenaData);
+    } catch (err) {
+        console.error('[KURYR API] Kritická chyba:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 const port = process.env.PORT || 3000;
 app.listen(port, '0.0.0.0', () => {

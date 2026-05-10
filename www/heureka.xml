@@ -6,12 +6,16 @@
         <PRICE_VAT>2990</PRICE_VAT>
         <STOCK>12</STOCK>
         <DESCRIPTION>Skladem v Holešovicích</DESCRIPTION>
+        <!-- REÁLNÁ FOTKA NIKE -->
+        <IMGURL>unsplash.com</IMGURL>
     </SHOPITEM>
     <SHOPITEM>
         <ITEM_ID>adidas-superstar-02</ITEM_ID>
-        <PRODUCTNAME>Černé tenisky Adidas Superstar</PRODUCTNAME>
+        <PRODUCTNAME>Černes tenisky Adidas Superstar</PRODUCTNAME>
         <PRICE_VAT>1990</PRICE_VAT>
         <STOCK>4</STOCK>
         <DESCRIPTION>Skladem na prodejně na Stromovce</DESCRIPTION>
+        <!-- REÁLNÁ FOTKA ADIDAS -->
+        <IMGURL>unsplash.com</IMGURL>
     </SHOPITEM>
 </SHOP>

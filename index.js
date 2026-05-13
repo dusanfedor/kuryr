@@ -234,9 +234,8 @@ async function synchronizujXmlFeedy() {
             console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
             for (const polozka of polozky) {
-                // NEPRŮSTŘELNÝ VYHLEDÁVAČ: Ignoruje velikost písmen a najde Heureka i Google tagy (id, g:id, G:ID)
+                // OPRAVENO: Bezpečný vyhledávač, který správně bere index [2] (čistý vnitřek tagu)
                 const najdiObsahTagu = (text, nazevTagu) => {
-                    // Vytvoříme regulární výraz, který najde <tag>, <g:tag>, <G:TAG> i <G:IMAGE_LINK>
                     const reg = new RegExp(`<([a-zA-Z]*:)?${nazevTagu}>([\\s\\S]*?)</([a-zA-Z]*:)?${nazevTagu}>`, 'i');
                     const match = text.match(reg);
                     return match && match[2] ? match[2].trim() : "";
@@ -265,7 +264,7 @@ async function synchronizujXmlFeedy() {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Naskladňuji: "${nazev.substring(0, 30)}...", Foto URL: ${obrazek}`);
+                console.log(`[XML STAHOVAČ] Naskladňuji: "${nazev.substring(0, 30)}...", Cena: ${cena} Kč, Foto: ${obrazek ? 'ANO' : 'NE'}`);
 
                 // Zápis do Supabase
                 const { error: upsertError } = await supabase

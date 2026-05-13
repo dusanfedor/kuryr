@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuryr - Vyhledávání a Objednávky</title>
+    <link rel="icon" href="data:,">
+    <link id="map-css" rel="stylesheet" href="data:text/css," />
+    <script id="map-js"></script>
+    <style>
+        :root { --primary: #28a745; --bg: #f8f9fa; --dark: #343a40; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 500px; padding: 20px; text-align: center; box-sizing: border-box; }
+        .btn-voice { width: 100%; padding: 20px; background: var(--primary); color: white; border: none; border-radius: 15px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #map { height: 300px; width: 100%; border-radius: 15px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: none; }
+        .prodejce-karta { background: white; border-radius: 15px; padding: 15px; margin-top: 15px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .card-content { margin-bottom: 12px; }
+        .nav-btn { display: inline-block; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: bold; margin-right: 5px; }
+        .order-section { margin-top: 15px; padding-top: 12px; border-top: 1px dashed #ccc; }
+        .order-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 0.9rem; margin-bottom: 8px; }
+        .btn-order { width: 100%; padding: 10px; background: #ffc107; color: var(--dark); border: none; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; }
+        .btn-order:hover { background: #e0a800; }
+        #status { height: 25px; margin-top: 20px; color: #666; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <!-- NAVIGAČNÍ PANEL PRO CHŮZI MEZI STRÁNKAMI -->
+    <div style="background: #343a40; width: 100%; padding: 10px 0; text-align: center; display: flex; justify-content: center; gap: 20px;">
+        <a href="/" style="color: #28a745; text-decoration: none; font-weight: bold; font-size: 1rem;">🛒 Zákazník (Hledat)</a>
+        <a href="/kuryr.html" style="color: white; text-decoration: none; font-weight: bold; font-size: 1rem;">🚗 Kurýr (Dispečink)</a>
+    </div>
+
+    <div class="container">
+        <div id="status">Připraveno</div> 
+        <button class="btn-voice" onclick="startHlas()">🎤 Hledat hlasem</button>
+        <div id="map"></div>
+        <div id="vysledky"></div>
+    </div>
+
+    <script>
+        const cdnProtokol = "https://";
+        const cdnDomena = "unpkg.com";
+        const cdnCesta = "/leaflet@1.9.4/dist/";
+
+        document.getElementById("map-css").href = cdnProtokol + cdnDomena + cdnCesta + "leaflet.css";
+        document.getElementById("map-js").src = cdnProtokol + cdnDomena + cdnCesta + "leaflet.js";
+
+        let map;
+        let markers = [];
+        let mojePoloha;
+
+        function initMap(lat, lng) {
+            const mapEl = document.getElementById('map');
+            mapEl.style.display = 'block';
+            if (!map) {
+                map = L.map('map').setView([lat, lng], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            } else {
+                map.setView([lat, lng], 13);
+            }
+            if (mojePoloha) map.removeLayer(mojePoloha);
+            mojePoloha = L.circle([lat, lng], { color: 'blue', fillColor: '#30f', fillOpacity: 0.4, radius: 30 }).addTo(map).bindPopup("Tvoje poloha");
+        }
+
+        async function odeslatKuryrum(produktId, prodejceId) {
+            const zpravaInput = document.getElementById(`msg-${produktId}`);
+            const zpravaText = zpravaInput ? zpravaInput.value.trim() : "";
+
+            if (!zpravaText) {
+                return alert("Před přivoláním kurýra prosím napište vzkaz!");
+            }
+
+            try {
+                const res = await fetch('/api/objednat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        produkt_id: produktId,
+                        prodejce_id: prodejceId,
+                        zprava: zpravaText
+                    })
+                });
+
+                const vysledek = await res.json();
+                if (vysledek.success) {
+                    alert("🎉 Zpráva byla odeslána kurýrům!");
+                    if (zpravaInput) zpravaInput.value = "";
+                } else {
+                    alert("Chyba: " + (vysledek.error || "Neznámá chyba"));
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Selhalo spojení se serverem.");
+            }
+        }
+
+        async function startHlas() {
+            const status = document.getElementById('status');
+            const seznam = document.getElementById('vysledky');
+            const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!Speech) return alert("Zkus Chrome.");
+            
+            const recognition = new Speech();
+            recognition.lang = 'cs-CZ';
+            status.innerText = "🔴 Poslouchám...";
+            recognition.start();
+
+            recognition.onresult = async (event) => {
+                let hlasovyText = "";
+                if (event.results && event.results) {
+                    hlasovyText = event.results.transcript;
+                }
+                
+                let textCisty = hlasovyText.replace(/[.]/g, "").trim().toLowerCase();
+                status.innerText = `Hledám: "${textCisty}"`;
+
+                let latitude = 50.1015;
+                let longitude = 14.4455;
+                initMap(latitude, longitude);
+
+                try {
+                    const res = await fetch(`/api/hledej?zbozi=${encodeURIComponent(textCisty)}&lat=${latitude}&lng=${longitude}`);
+                    const data = await res.json();
+                    
+                    markers.forEach(m => map.removeLayer(m));
+                    markers = [];
+                    seznam.innerHTML = "";
+
+                    if (data && data.length > 0) {
+                        data.forEach(p => {
+                            const prot = "https://";
+                            const dome = "google.com";
+                            const path = "/maps/dir/?api=1";
+                            const navigaceUrl = prot + dome + path + "&destination=" + p.lat + "," + p.lng;
+
+                            let objednavkaHtml = "";
+                            if (p.produkt_id && p.produkt_id !== "0" && p.produkt_id !== 0) {
+                                objednavkaHtml = `
+                                    <div class="order-section">
+                                        <input type="text" id="msg-${p.produkt_id}" class="order-input" placeholder="Vzkaz kurýrovi (např: Kasa 2, PIN: 1234)...">
+                                        <button class="btn-order" onclick="odeslatKuryrum(${p.produkt_id}, '${p.prodejce_id}')">💳 Koupit & volat kurýra</button>
+                                    </div>`;
+                            }
+
+                            let obrazekHtml = "";
+                            if (p.obrazek_url && p.obrazek_url.trim() !== "") {
+                                obrazekHtml = `<img src="${p.obrazek_url}" style="width: 85px; height: 85px; object-fit: cover; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" alt="produkt">`;
+                            }
+
+                            seznam.innerHTML += `
+                                <div class="prodejce-karta" style="display: flex; flex-direction: column; gap: 10px;">
+                                    <div style="display: flex; align-items: center; gap: 15px;">
+                                        ${obrazekHtml}
+                                        <div style="flex-grow: 1;">
+                                            <strong>📍 ${p.prodejce_jmeno || 'Obchod'}</strong><br>
+                                            📦 ${p.nazev_produktu || 'Zboží'}<br>
+                                            💰 <strong>Cena: ${p.cena || 0} Kč</strong><br>
+                                            📞 <a href="tel:${p.telefon}">${p.telefon || 'neuveden'}</a>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 5px;">
+                                        <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Navigovat</a>
+                                    </div>
+                                    ${objednavkaHtml}
+                                </div>`;
+
+                            if (p.lat && p.lng) {
+                                const m = L.marker([p.lat, p.lng])
+                                    .addTo(map)
+                                    .bindPopup(`<b>${p.prodejce_jmeno}</b><br>${p.nazev_produktu}`);
+                                markers.push(m);
+                            }
+                        });
+
+                        const group = new L.featureGroup(markers);
+                        if (markers.length > 0) map.fitBounds(group.getBounds().pad(0.2));
+                    } else {
+                        seznam.innerText = "Nic nenalezeno.";
+                    }
+                } catch (e) {
+                    console.error(e);
+                    status.innerText = "Chyba při vyhledávání.";
+                }
+            };
+        }
+    </script>
+</body>
+</html>

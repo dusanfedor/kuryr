@@ -13,21 +13,17 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // ==========================================
 // RADIKÁLNÍ LIQUIDACE CACHE: VYHLEDÁVAČ MÁ ABSOLUTNÍ PRIORITU
 // ==========================================
+// Vrátíme vyhledávač zpět pod bezpečný název index.html
 app.get('/', (req, res) => {
-    // Tento příkaz vymaže starou kurýrní paměť v tvém mobilním telefonu
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.sendFile(path.join(__dirname, 'www', 'vyhledavac.html'));
+    res.sendFile(path.join(__dirname, 'www', 'index.html'));
 });
 
 app.get('/index.html', (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.sendFile(path.join(__dirname, 'www', 'vyhledavac.html'));
+    res.sendFile(path.join(__dirname, 'www', 'index.html'));
 });
 
-// Trasa pro dispečink kurýrů
-app.get('/kuryr.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'www', 'kuryr.html'));
-});
 
 // Statické soubory jsou až POD ROZCESTNÍKEM
 app.use(express.static(path.join(__dirname, 'www'), {

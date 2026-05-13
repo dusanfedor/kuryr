@@ -195,35 +195,36 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
 // ==========================================
 // AUTOMATICKÝ INTERNETOVÝ XML STAHOVAČ
 // ==========================================
-            console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
+                       console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
             for (const polozka of polozky) {
-                // Vytahujeme obsahy značek do polí
-                const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/);
-                const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/);
-                const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/);
-                const matchSklad = polozka.match(/<STOCK>([\s\S]*?)<\/STOCK>/);
-                const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/);
-                const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/);
+                // Hledání XML značek v textu položky
+                const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/i);
+                const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/i);
+                const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/i);
+                const matchSklad = polozka.match(/<STOCK>([\s\S]*?)<\/STOCK>/i);
+                const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/i);
+                const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/i);
 
-                // Pokud chybí ID nebo Název, bezpečně přeskočíme položku
+                // BEZPEČNOSTNÍ POJISTKA: Pokud chybí kritické parametry ID nebo Název, položku přeskočíme
                 if (!matchId || !matchNazev) continue;
 
-                // TADY JE TA OPRAVA: Bereme index [1], což je čistý text uvnitř XML značek!
-                const item_id = matchId[1].trim();
-                const nazev = matchNazev[1].trim();
-                const cena = matchCena ? parseFloat(matchCena[1].trim()) : 0;
-                const sklad = matchSklad ? parseInt(matchSklad[1].trim()) : 0;
-                const popis = matchPopis ? matchPopis[1].trim() : "";
+                // Bezpečné vytažení čistého textu z indexu [1] pouze pokud značka ve feedu reálně existuje
+                const item_id = matchId[1] ? matchId[1].trim() : "";
+                const nazev = matchNazev[1] ? matchNazev[1].trim() : "";
+                const cena = matchCena && matchCena[1] ? parseFloat(matchCena[1].trim()) : 0;
+                const sklad = matchSklad && matchSklad[1] ? parseInt(matchSklad[1].trim()) : 0;
+                const popis = matchPopis && matchPopis[1] ? matchPopis[1].trim() : "";
                 
-                let obrazek = matchObrazek ? matchObrazek[1].trim() : "";
+                let obrazek = matchObrazek && matchObrazek[1] ? matchObrazek[1].trim() : "";
                 if (obrazek) {
+                    // Okamžitá oprava ampersandu pro zobrazení fotky v mobilních telefonech
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Úspěšně načteno: "${nazev}", Foto URL: ${obrazek}`);
+                console.log(`[XML STAHOVAČ] Načteno z internetu: "${nazev}", Foto URL: ${obrazek}`);
 
-                // Naskladnění do Supabase
+                // Bezpečný zápis do databáze v Supabase
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({
@@ -240,6 +241,7 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
                     console.error(`[XML STAHOVAČ] Chyba uložení produktu ${nazev}:`, upsertError.message);
                 }
             }
+
 
 
 

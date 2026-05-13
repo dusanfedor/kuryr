@@ -141,19 +141,24 @@
                             }
 
                             // Neprůstřelná pojistka: pokud adresa obsahuje Unsplash (který blokuje mobily), podstrčíme bezpečný obrázek tenisky z CDN
-                            let fotoAdresa = p.obrazek_url;
-                            if (!fotoAdresa || fotoAdresa.includes("unsplash.com")) {
-                                if (p.nazev_produktu.toLowerCase().includes("adidas")) {
-                                    fotoAdresa = "adidas.com";
-                                } else {
-                                    fotoAdresa = "nike.com";
-                                }
+                                                       // Načteme čistou adresu ze Supabase tabulky produkty
+                            let surovaAdresa = p.obrazek_url || '';
+                            let fotoAdresa = '';
+
+                            // Pokud adresa v databázi už začíná protokolem, vezmeme ji, jinak k ní protokol natvrdo přilepíme
+                            if (surovaAdresa.startsWith('http://') || surovaAdresa.startsWith('https://')) {
+                                fotoAdresa = surovaAdresa;
+                            } else if (surovaAdresa.trim() !== '') {
+                                fotoAdresa = 'https://' + surovaAdresa;
+                            } else {
+                                // Záložní šedý čtverec, pokud by v databázi adresa úplně chyběla
+                                fotoAdresa = 'data:image/svg+xml;utf8,<svg xmlns="w3.org" width="85" height="85" viewBox="0 0 85 85"><rect width="85" height="85" fill="%23e9ecef"/><text x="50%" y="55%" font-family="sans-serif" font-size="24" text-anchor="middle">🖼️</text></svg>';
                             }
 
                             seznam.innerHTML += `
                                 <div class="prodejce-karta">
                                     <div class="card-main">
-                                      <img src="${fotoAdresa}" class="product-img" style="width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px;" alt="Zboží">
+                                        <img src="${fotoAdresa}" class="product-img" style="width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px;" alt="Zboží">
                                         <div style="flex-grow: 1;">
                                             <strong>📍 ${p.prodejce_jmeno || 'Obchod'}</strong><br>
                                             📦 ${p.nazev_produktu || 'Zboží'}<br>
@@ -166,6 +171,7 @@
                                     </div>
                                     ${objednavkaHtml}
                                 </div>`;
+
 
                             if (p.lat && p.lng) {
                                 const m = L.marker([p.lat, p.lng]).addTo(map).bindPopup(`<b>${p.prodejce_jmeno}</b>`);

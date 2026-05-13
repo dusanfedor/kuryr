@@ -153,7 +153,7 @@
                             seznam.innerHTML += `
                                 <div class="prodejce-karta">
                                     <div class="card-main">
-                                        <img src="${fotoAdresa}" class="product-img" alt="foto" onerror="this.src='unsplash.com'">
+                                      <img src="${fotoAdresa}" class="product-img" style="width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px;" alt="Zboží">
                                         <div style="flex-grow: 1;">
                                             <strong>📍 ${p.prodejce_jmeno || 'Obchod'}</strong><br>
                                             📦 ${p.nazev_produktu || 'Zboží'}<br>

@@ -222,7 +222,9 @@ async function synchronizujXmlFeedy() {
                 continue;
             }
 
-            const polozky = surovaXmlData.split('<SHOPITEM>');
+                        // OPRAVA: Rozdělí feed bez ohledu na to, zda je SHOPITEM velkými nebo malými písmeny (/i)
+            const polozky = surovaXmlData.split(/<SHOPITEM>/i);
+
             polozky.shift(); 
 
             console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);

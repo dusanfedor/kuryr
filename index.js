@@ -217,7 +217,8 @@ async function synchronizujXmlFeedy() {
 
             console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
-            for (const polozka of polozky) {
+                      for (const polozka of polozky) {
+                // Neprůstřelné vytažení obsahu uvnitř značek (index [1] bere čistý vnitřek)
                 const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/i);
                 const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/i);
                 const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/i);
@@ -225,9 +226,9 @@ async function synchronizujXmlFeedy() {
                 const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/i);
                 const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/i);
 
+                // Pokud chybí kritické parametry, přeskočíme položku
                 if (!matchId || !matchNazev) continue;
 
-                // OPRAVENO: Správné vytažení textu z pole regulárního výrazu přes index [1]
                 const item_id = matchId[1].trim();
                 const nazev = matchNazev[1].trim();
                 const cena = matchCena ? parseFloat(matchCena[1].trim()) : 0;
@@ -236,11 +237,13 @@ async function synchronizujXmlFeedy() {
                 
                 let obrazek = matchObrazek ? matchObrazek[1].trim() : "";
                 if (obrazek) {
+                    // Převod XML ampersandu na klasické internetové &
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Úspěšně parsováno: "${nazev}", Foto: ${obrazek ? 'ANO' : 'NE'}`);
+                console.log(`[XML STAHOVAČ] Zpracovávám: "${nazev}", Foto URL: ${obrazek}`);
 
+                // Naskladnění do Supabase
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({
@@ -257,6 +260,7 @@ async function synchronizujXmlFeedy() {
                     console.error(`[XML STAHOVAČ] Chyba uložení produktu ${nazev}:`, upsertError.message);
                 }
             }
+
             console.log(`[XML STAHOVAČ] Internetová synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
         }
     } catch (err) {

@@ -145,28 +145,19 @@
                                                        // Načteme surovou adresu z databáze
                                                         // Načteme surovou adresu z databáze
                                                         // Načteme surovou adresu z databáze Supabase
+                                                       // NEPRŮSTŘELNÉ: Bere čistou a dlouhou adresu obrázku přímo z nového živého XML feedu
                             let surovaAdresa = p.obrazek_url || '';
                             let fotoAdresa = '';
 
-                            // DEFINITIVNÍ OVERRIDE: Poskládáme dlouhé Sportisimo linky z kousků proti ořezávání v chatu
-                            if (surovaAdresa.includes('sportisimo.com')) {
-                                if (p.nazev_produktu.toLowerCase().includes('adidas') || p.nazev_produktu.toLowerCase().includes('retro')) {
-
-                                    fotoAdresa = 'https://i.sportisimo.com/products/images/1986/1986824/700x700/adidas-advantage-base-2-0_0.jpg';
-                                    // Spojíme kousky adresy pro Nike botasky
-                                    fotoAdresa = 'https://i.sportisimo.com/products/images/1261/1261379/700x700/nike-nike-air-max-sc-whi_5.jpg';
-                                }
-                            } else if (surovaAdresa.includes('picsum.photos')) {
-                                fotoAdresa = surovaAdresa.startsWith('http') ? surovaAdresa : 'https://' + surovaAdresa;
-                                if (!fotoAdresa.includes('/200')) fotoAdresa += '/200';
-                            } else if (surovaAdresa.startsWith('http://') || surovaAdresa.startsWith('https://')) {
+                            if (surovaAdresa.startsWith('http://') || surovaAdresa.startsWith('https://')) {
                                 fotoAdresa = surovaAdresa;
                             } else if (surovaAdresa.trim() !== '') {
                                 fotoAdresa = 'https://' + surovaAdresa;
                             } else {
-                                // Záložní čtverec, pokud by v databázi adresa chyběla
+                                // Záložní čtverec, pokud by u nějakého produktu fotka chyběla
                                 fotoAdresa = 'data:image/svg+xml;utf8,<svg xmlns="w3.org" width="85" height="85" viewBox="0 0 85 85"><rect width="85" height="85" fill="%23e9ecef"/><text x="50%" y="55%" font-family="sans-serif" font-size="24" text-anchor="middle">🖼️</text></svg>';
                             }
+
 
 
                             seznam.innerHTML += `

@@ -198,6 +198,9 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
  async function synchronizujXmlFeedy() {
     console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
     
+    const https = require('https');
+    const agent = new https.Agent({ rejectUnauthorized: false });
+
     try {
         const { data: prodejci, error: dbError } = await supabase
             .from('prodejci')
@@ -206,123 +209,72 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
         if (dbError) throw dbError;
 
         for (const prodejce of prodejci) {
-            console.log(`[XML STAHOVAČ] Zahajuji zpracování prodejce: ${prodejce.jmeno}`);
+            console.log(`[XML STAHOVAČ] Stahuji ostrý Heureka feed pro: ${prodejce.jmeno}`);
             
-            let surovaXmlData = "";
-            let polozky = [];
-
-            // Pokus o načtení lokálního souboru z disku
-            try {
-                surovaXmlData = fs.readFileSync(path.join(__dirname, 'www', 'catherine.xml'), 'utf-8');
-                surovaXmlData = surovaXmlData.replace(/\r/g, "");
-
-                if (surovaXmlData.toLowerCase().includes('<shopitem>')) {
-                    polozky = surovaXmlData.split(/<SHOPITEM>/i);
-                    polozky.shift();
-                } else if (surovaXmlData.toLowerCase().includes('<item>')) {
-                    polozky = surovaXmlData.split(/<item>/i);
-                    polozky.shift();
+            // Stáhneme ten Heureka feed z Google Disku Catherine Life
+            const response = await axios.get(prodejce.xml_url, {
+                httpsAgent: agent,
+                timeout: 20000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 }
-            } catch (fsError) {
-                console.log(`[XML STAHOVAČ] Lokální soubor www/catherine.xml se nepodařilo přečíst.`);
-            }
+            });
+            
+            let surovaXmlData = response.data;
+            if (!surovaXmlData || typeof surovaXmlData !== 'string') continue;
 
-            // OSTRÁ ZÁLOHA: Pokud je soubor na disku prázdný nebo poškozený, vygenerujeme data natvrdo z kódu!
-            let produktyKeZpracovani = [];
+            surovaXmlData = surovaXmlData.replace(/\r/g, "");
 
-            if (polozky.length > 0) {
-                console.log(`[XML STAHOVAČ] Soubor úspěšně načten. Zpracovávám ${polozky.length} položek z disku.`);
-                
-                // Pomocná funkce pro vytažení textu z XML tagů
-                const extrahujVnitrek = (text, tag) => {
+            // Rozdělení podle standardního Heureka tagu <SHOPITEM>
+            const polozky = surovaXmlData.split(/<SHOPITEM>/i);
+            polozky.shift(); 
+
+            console.log(`[XML STAHOVAČ] Staženo. Naskladňuji ${polozky.length} ostrých produktů do Supabase.`);
+
+            for (const polozka of polozky) {
+                const extrahujTag = (text, tag) => {
                     const startTag = `<${tag}>`; const endTag = `</${tag}>`;
                     const startPos = text.indexOf(startTag); const endPos = text.indexOf(endTag);
                     if (startPos !== -1 && endPos !== -1) return text.substring(startPos + startTag.length, endPos).trim();
-                    const startTagUpper = `<${tag.toUpperCase()}>`; const endTagUpper = `</${tag.toUpperCase()}>`;
-                    const startPosUpper = text.indexOf(startTagUpper); const endPosUpper = text.indexOf(endTagUpper);
-                    if (startPosUpper !== -1 && endPosUpper !== -1) return text.substring(startPosUpper + startTagUpper.length, endPosUpper).trim();
                     return "";
                 };
 
-                polozky.forEach(polozka => {
-                    const id = extrahujVnitrek(polozka, 'g:id') || extrahujVnitrek(polozka, 'item_id');
-                    const title = extrahujVnitrek(polozka, 'g:title') || extrahujVnitrek(polozka, 'productname');
-                    const price = extrahujVnitrek(polozka, 'g:price') || extrahujVnitrek(polozka, 'price_vat');
-                    const desc = extrahujVnitrek(polozka, 'g:description') || extrahujVnitrek(polozka, 'description');
-                    const img = extrahujVnitrek(polozka, 'g:image_link') || extrahujVnitrek(polozka, 'imgurl');
+                const item_id = extrahujTag(polozka, 'ITEM_ID');
+                const nazev = extrahujTag(polozka, 'PRODUCTNAME');
+                const cenaText = extrahujTag(polozka, 'PRICE_VAT');
+                const popis = extrahujTag(polozka, 'DESCRIPTION');
+                let obrazek = extrahujTag(polozka, 'IMGURL');
 
-                    if (id && title) {
-                        produktyKeZpracovani.push({ item_id: id, nazev: title, cena_text: price, popis: desc, obrazek: img });
-                    }
-                });
-            } else {
-                console.log(`[XML STAHOVAČ] Varování: Soubor na disku neobsahuje položky. Aktivuji automatický plnič dat Catherine Life!`);
-                // Vložíme reálné české čepice a doplňky s funkčními fotkami, které mobil nikdy nezablokuje
-                produktyKeZpracovani = [
-                    {
-                        item_id: 'cl-cepice-01',
-                        nazev: 'Dámská zimní pletená čepice Catherine',
-                        cena_text: '390',
-                        popis: 'Teplá elegantní dámská pletená čepice s bambulí. Ideální do chladného zimního počasí. Skladem v butiku v Holešovicích.',
-                        obrazek: 'unsplash.com'
-                    },
-                    {
-                        item_id: 'cl-sala-02',
-                        nazev: 'Hřejivá pletená šála Catherine Life',
-                        cena_text: '450',
-                        popis: 'Dlouhá pletená šála z příjemného nekousavého materiálu. Skvěle ladí k zimním kabátům.',
-                        obrazek: 'unsplash.com'
-                    },
-                    {
-                        item_id: 'cl-rukavice-03',
-                        nazev: 'Elegantní dámské rukavice černá',
-                        cena_text: '290',
-                        popis: 'Klasické černé dámské rukavice s jemným prošíváním. Dotyková vrstva na ukazováčku pro pohodlné ovládání mobilu.',
-                        obrazek: 'unsplash.com'
-                    }
-                ];
-            }
+                if (!item_id || !nazev) continue;
 
-            console.log(`[XML STAHOVAČ] Zahajuji naskladňování ${produktyKeZpracovani.length} položek do Supabase...`);
+                let cena = parseFloat(cenaText) || 0;
+                let sklad = parseInt(extrahujTag(polozka, 'STOCK')) || 5;
 
-            for (const p of produktyKeZpracovani) {
-                let cena = 0;
-                if (p.cena_text) {
-                    const cistaCena = p.cena_text.replace(/[a-zA-Z\s]/g, '').replace(',', '.');
-                    cena = parseFloat(cistaCena) || 0;
+                if (obrazek) {
+                    obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                let fotoUrl = p.obrazek;
-                if (fotoUrl) {
-                    fotoUrl = fotoUrl.replace(/&amp;/g, '&');
-                }
+                console.log(`[XML STAHOVAČ] Ukládám: "${nazev.substring(0, 25)}...", Foto: ${obrazek ? 'ANO' : 'NE'}`);
 
-                console.log(`[XML STAHOVAČ] Zapisuji: "${p.nazev.substring(0, 30)}...", Cena: ${cena} Kč, Foto: ${fotoUrl ? 'ANO' : 'NE'}`);
-
-                const { error: upsertError } = await supabase
+                await supabase
                     .from('produkty')
                     .upsert({
                         prodejce_id: prodejce.id,
-                        item_id: p.item_id,
-                        nazev: p.nazev,
+                        item_id: item_id,
+                        nazev: nazev,
                         cena: cena,
-                        sklad: 5,
-                        popis: p.popis,       
-                        obrazek: fotoUrl     
+                        sklad: sklad,
+                        popis: popis,       
+                        obrazek: obrazek     
                     }, { onConflict: 'item_id' });
-
-                if (upsertError) {
-                    console.error(`[XML STAHOVAČ] Chyba zápisu produktu do Supabase:`, upsertError.message);
-                }
             }
-            console.log(`[XML STAHOVAČ] Lokální synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
+            console.log(`[XML STAHOVAČ] Synchronizace pro ${prodejce.jmeno} kompletní.`);
         }
     } catch (err) {
-        console.error('[XML STAHOVAČ] Kritická chyba uvnitř stahovače:', err.message);
+        console.error('[XML STAHOVAČ] Chyba:', err.message);
     }
 }
 
-// Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
 
 // ==========================================

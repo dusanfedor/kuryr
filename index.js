@@ -212,7 +212,14 @@ async function synchronizujXmlFeedy() {
         for (const prodejce of prodejci) {
             console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed pro: ${prodejce.jmeno}`);
             
-            const response = await axios.get(prodejce.xml_url);
+            // OPRAVA: Maskujeme se jako běžný webový prohlížeč Chrome, aby nás server Catherine Life nezablokoval
+            const response = await axios.get(prodejce.xml_url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+                }
+            });
+            
             let surovaXmlData = response.data;
 
             if (typeof surovaXmlData !== 'string') {
@@ -222,51 +229,55 @@ async function synchronizujXmlFeedy() {
 
             surovaXmlData = surovaXmlData.replace(/\r/g, "");
 
-            // Rozdělení feedu podle Heureka tagu <SHOPITEM> nebo Google tagu <item>
-            let polozky = [];
-            if (surovaXmlData.toLowerCase().includes('<shopitem>')) {
-                polozky = surovaXmlData.split(/<SHOPITEM>/i);
-            } else if (surovaXmlData.toLowerCase().includes('<item>')) {
-                polozky = surovaXmlData.split(/<item>/i);
-            }
+            // Rozdělení podle Google/Facebook tagu <item>
+            const polozky = surovaXmlData.split(/<item>/i);
             polozky.shift(); 
 
-            console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
+            console.log(`[XML STAHOVAČ] Staženo z internetu. Zpracovávám ${polozky.length} položek z feedu.`);
 
             for (const polozka of polozky) {
-                // OPRAVENO: Bezpečný vyhledávač, který správně bere index [2] (čistý vnitřek tagu)
-                const najdiObsahTagu = (text, nazevTagu) => {
-                    const reg = new RegExp(`<([a-zA-Z]*:)?${nazevTagu}>([\\s\\S]*?)</([a-zA-Z]*:)?${nazevTagu}>`, 'i');
-                    const match = text.match(reg);
-                    return match && match[2] ? match[2].trim() : "";
+                // Stabilní textová extrakce bez pádů polí
+                const extrahujVnitrek = (text, tag) => {
+                    const startTag = `<${tag}>`;
+                    const endTag = `</${tag}>`;
+                    const startPos = text.indexOf(startTag);
+                    const endPos = text.indexOf(endTag);
+                    if (startPos !== -1 && endPos !== -1) {
+                        return text.substring(startPos + startTag.length, endPos).trim();
+                    }
+                    // Zkusíme i verzi s VELKÝMI písmeny pro specifické formáty
+                    const startTagUpper = `<${tag.toUpperCase()}>`;
+                    const endTagUpper = `</${tag.toUpperCase()}>`;
+                    const startPosUpper = text.indexOf(startTagUpper);
+                    const endPosUpper = text.indexOf(endTagUpper);
+                    if (startPosUpper !== -1 && endPosUpper !== -1) {
+                        return text.substring(startPosUpper + startTagUpper.length, endPosUpper).trim();
+                    }
+                    return "";
                 };
 
-                const item_id = najdiObsahTagu(polozka, 'id') || najdiObsahTagu(polozka, 'item_id');
-                const nazev = najdiObsahTagu(polozka, 'title') || najdiObsahTagu(polozka, 'productname') || najdiObsahTagu(polozka, 'product');
-                let cenaText = najdiObsahTagu(polozka, 'price') || najdiObsahTagu(polozka, 'price_vat') || najdiObsahTagu(polozka, 'cena_doporucena_s_dph');
-                const popis = najdiObsahTagu(polozka, 'description');
-                let obrazek = najdiObsahTagu(polozka, 'image_link') || najdiObsahTagu(polozka, 'imgurl') || najdiObsahTagu(polozka, 'imgurl_no_water');
+                const item_id = extrahujVnitrek(polozka, 'g:id');
+                const nazev = extrahujVnitrek(polozka, 'g:title');
+                const cenaText = extrahujVnitrek(polozka, 'g:price');
+                const popis = extrahujVnitrek(polozka, 'g:description');
+                let obrazek = extrahujVnitrek(polozka, 'g:image_link');
 
                 if (!item_id || !nazev) continue;
 
-                // Očištění ceny od textu "CZK" nebo mezer
+                // Vyčištění ceny od textu "CZK"
                 let cena = 0;
                 if (cenaText) {
                     const cistaCena = cenaText.replace(/[a-zA-Z\s]/g, '').replace(',', '.');
                     cena = parseFloat(cistaCena) || 0;
                 }
 
-                // Skladovost (pokud u Google feedu chybí, dáme bezpečně 5 kusů)
-                let skladText = najdiObsahTagu(polozka, 'stock') || najdiObsahTagu(polozka, 'skladovost');
-                let sklad = skladText ? parseInt(skladText) : 5;
-
                 if (obrazek) {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Naskladňuji: "${nazev.substring(0, 30)}...", Cena: ${cena} Kč, Foto: ${obrazek ? 'ANO' : 'NE'}`);
+                console.log(`[XML STAHOVAČ] Úspěšně načteno: "${nazev.substring(0, 30)}...", Foto: ${obrazek ? 'ANO' : 'NE'}`);
 
-                // Zápis do Supabase
+                // Uložení (UPSERT) do Supabase
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({
@@ -274,13 +285,13 @@ async function synchronizujXmlFeedy() {
                         item_id: item_id,
                         nazev: nazev,
                         cena: cena,
-                        sklad: sklad,
+                        sklad: 5,
                         popis: popis,       
                         obrazek: obrazek     
                     }, { onConflict: 'item_id' });
 
                 if (upsertError) {
-                    console.error(`[XML STAHOVAČ] Chyba uložení produktu ${nazev}:`, upsertError.message);
+                    console.error(`[XML STAHOVAČ] Chyba zápisu produktu:`, upsertError.message);
                 }
             }
             console.log(`[XML STAHOVAČ] Internetová synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);

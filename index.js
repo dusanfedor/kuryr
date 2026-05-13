@@ -202,7 +202,6 @@ async function synchronizujXmlFeedy() {
     console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
     
     try {
-        // 1. Vytáhneme ze Supabase prodejce, kteří mají vyplněnou URL adresu feedu
         const { data: prodejci, error: dbError } = await supabase
             .from('prodejci')
             .select('id, jmeno, xml_url')
@@ -216,48 +215,47 @@ async function synchronizujXmlFeedy() {
             const response = await axios.get(prodejce.xml_url);
             let surovaXmlData = response.data;
 
-            // Vyčištění skrytých Windows konců řádků, aby regulární výrazy spolehlivě zabraly
             if (typeof surovaXmlData === 'string') {
                 surovaXmlData = surovaXmlData.replace(/\r/g, "");
             } else {
-                console.error('[XML STAHOVAČ] Stažená data nejsou textový řetězec.');
+                console.error('[XML STAHOVAČ] Data nejsou validní text.');
                 continue;
             }
 
-            // Rozdělení podle přesného Heureka tagu, který máš ve svém souboru xml
             const polozky = surovaXmlData.split('<SHOPITEM>');
             polozky.shift(); 
 
             console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
             for (const polozka of polozky) {
-                // Hledání XML značek v textu položky
-                const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/i);
-                const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/i);
-                const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/i);
-                const matchSklad = polozka.match(/<STOCK>([\s\S]*?)<\/STOCK>/i);
-                const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/i);
-                const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/i);
+                // Univerzální funkce pro vytahování značek z obou formátů e-shopů
+                const dejHodnotu = (text, hlavniTag, alternativniTag) => {
+                    let match = text.match(new RegExp(`<${hlavniTag}>([\\s\\S]*?)</${hlavniTag}>`, 'i'));
+                    if (!match && alternativniTag) {
+                        match = text.match(new RegExp(`<${alternativniTag}>([\\s\\S]*?)</${alternativniTag}>`, 'i'));
+                    }
+                    return match && match[1] ? match[1].trim() : "";
+                };
 
-                // BEZPEČNOSTNÍ POJISTKA: Pokud chybí kritické parametry ID nebo Název, položku přeskočíme
-                if (!matchId || !matchNazev) continue;
+                // Načteme data - pokud nenajde standardní tag, zkusí verzi od Viakomu
+                const item_id = dejHodnotu(polozka, 'ITEM_ID', 'ID_PRODUCT');
+                const nazev = dejHodnotu(polozka, 'PRODUCTNAME', 'PRODUCT');
+                const cenaText = dejHodnotu(polozka, 'PRICE_VAT', 'CENA_DOPORUCENA_S_DPH');
+                const skladText = dejHodnotu(polozka, 'STOCK', 'SKLADOVOST');
+                const popis = dejHodnotu(polozka, 'DESCRIPTION');
+                let obrazek = dejHodnotu(polozka, 'IMGURL', 'IMGURL_NO_WATER');
 
-                // Bezpečné vytažení čistého textu z indexu [1] s ochranou proti null
-                const item_id = matchId && matchId[1] ? matchId[1].trim() : "";
-                const nazev = matchNazev && matchNazev[1] ? matchNazev[1].trim() : "";
-                const cena = matchCena && matchCena[1] ? parseFloat(matchCena[1].trim()) : 0;
-                const sklad = matchSklad && matchSklad[1] ? parseInt(matchSklad[1].trim()) : 0;
-                const popis = matchPopis && matchPopis[1] ? matchPopis[1].trim() : "";
-                
-                let obrazek = matchObrazek && matchObrazek[1] ? matchObrazek[1].trim() : "";
+                if (!item_id || !nazev) continue;
+
+                const cena = cenaText ? parseFloat(cenaText) : 0;
+                const sklad = skladText ? parseInt(skladText) : 0;
+
                 if (obrazek) {
-                    // Okamžitá oprava ampersandu pro zobrazení fotky v mobilních telefonech
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Načteno z internetu: "${nazev}", Foto URL: ${obrazek ? 'ANO' : 'NE'}`);
+                console.log(`[XML STAHOVAČ] Načteno z internetu: "${nazev}", Foto: ${obrazek ? 'ANO' : 'NE'}`);
 
-                // Bezpečný zápis do databáze v Supabase (v asynchronním kontextu cyklu)
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({
@@ -280,6 +278,7 @@ async function synchronizujXmlFeedy() {
         console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
     }
 }
+
 
 // Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);

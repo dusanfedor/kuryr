@@ -146,13 +146,16 @@
                                     </div>`;
                             }
 
-                            let obrazekHtml = "";
+                                                        let obrazekHtml = "";
                             if (p.obrazek_url && p.obrazek_url.trim() !== "") {
-                                obrazekHtml = `<img src="${p.obrazek_url}" style="width: 85px; height: 85px; object-fit: cover; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" alt="produkt">`;
+                                obrazekHtml = `<img src="${p.obrazek_url}" style="width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" alt="produkt">`;
+                            } else {
+                                // Záložní čtverec, abychom viděli, že karta má pro fotku vyhrazené místo
+                                obrazekHtml = `<div style="width: 85px; height: 85px; min-width: 85px; background: #e9ecef; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2rem;">🖼️</div>`;
                             }
 
                             seznam.innerHTML += `
-                                <div class="prodejce-karta" style="display: flex; flex-direction: column; gap: 10px;">
+                                <div class="prodejce-karta" style="display: flex; flex-direction: column; gap: 10px; background: white; border-radius: 15px; padding: 15px; margin-top: 15px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                                     <div style="display: flex; align-items: center; gap: 15px;">
                                         ${obrazekHtml}
                                         <div style="flex-grow: 1;">
@@ -162,11 +165,12 @@
                                             📞 <a href="tel:${p.telefon}">${p.telefon || 'neuveden'}</a>
                                         </div>
                                     </div>
-                                    <div style="margin-top: 5px;">
-                                        <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Navigovat</a>
+                                    <div style="margin-top: 5px; display: flex; gap: 10px;">
+                                        <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn" style="display: inline-block; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: bold;">🚗 Navigovat</a>
                                     </div>
                                     ${objednavkaHtml}
                                 </div>`;
+
 
                             if (p.lat && p.lng) {
                                 const m = L.marker([p.lat, p.lng])

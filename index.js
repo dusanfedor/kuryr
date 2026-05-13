@@ -212,12 +212,14 @@ async function synchronizujXmlFeedy() {
             const response = await axios.get(prodejce.xml_url);
             const surovaXmlData = response.data;
 
-            // Rozdělíme feed bez ohledu na to, zda je SHOPITEM velkými nebo malými písmeny
+            // Rozdělíme feed bez ohledu na velikost písmen v SHOPITEM
             const polozky = surovaXmlData.split(/<SHOPITEM>/i);
             polozky.shift(); 
 
+            console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
+
             for (const polozka of polozky) {
-                // Neprůstřelné vytažení textu mezi značkami pomocí regulárních výrazů (včetně konců řádků)
+                // Správné vytažení textu uvnitř závorek ([1]) pomocí regulárních výrazů
                 const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/i);
                 const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/i);
                 const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/i);
@@ -225,9 +227,9 @@ async function synchronizujXmlFeedy() {
                 const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/i);
                 const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/i);
 
-                // Pokud chybí kritické parametry, přeskočíme poškozenou položku
                 if (!matchId || !matchNazev) continue;
 
+                // Přidáno [1] pro správné vytažení textu z pole regulárního výrazu
                 const item_id = matchId[1].trim();
                 const nazev = matchNazev[1].trim();
                 const cena = matchCena ? parseFloat(matchCena[1].trim()) : 0;
@@ -236,11 +238,10 @@ async function synchronizujXmlFeedy() {
                 
                 let obrazek = matchObrazek ? matchObrazek[1].trim() : "";
                 if (obrazek) {
-                    // Odstraníme XML kódování ampersandu na klasické internetové &
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Zpracovávám: "${nazev}", Foto: ${obrazek ? 'ANO' : 'NE'}`);
+                console.log(`[XML STAHOVAČ] Úspěšně parsováno: "${nazev}", Foto: ${obrazek ? 'ANO' : 'NE'}`);
 
                 const { error: upsertError } = await supabase
                     .from('produkty')
@@ -264,6 +265,7 @@ async function synchronizujXmlFeedy() {
         console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
     }
 }
+
 
 // Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);

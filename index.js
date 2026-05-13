@@ -11,13 +11,25 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ==========================================
-// TADY JE TA OPRAVA: HLAVNÍ TRASA MÁ ABSOLUTNÍ PŘEDNOST!
+// RADIKÁLNÍ LIQUIDACE CACHE: VYHLEDÁVAČ MÁ ABSOLUTNÍ PRIORITU
 // ==========================================
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'www', 'index.html'));
+    // Tento příkaz vymaže starou kurýrní paměť v tvém mobilním telefonu
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'www', 'vyhledavac.html'));
 });
 
-// Statické soubory ze složky www s vypnutou mezipamětí jsou až POD NÍ
+app.get('/index.html', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'www', 'vyhledavac.html'));
+});
+
+// Trasa pro dispečink kurýrů
+app.get('/kuryr.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'www', 'kuryr.html'));
+});
+
+// Statické soubory jsou až POD ROZCESTNÍKEM
 app.use(express.static(path.join(__dirname, 'www'), {
     setHeaders: (res, path) => {
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -28,13 +40,7 @@ app.use(express.json());
 // Oprava favicon chyby (vrátí 'No Content')
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// ==========================================
-// TRASY PRO ZÁKAZNÍKY
-// ==========================================
 
-// ==========================================
-// TRASY PRO ZÁKAZNÍKY
-// ==========================================
 
 // 1. Čistá doména bez parametrů natvrdo otevře zákaznický vyhledávač
 app.get('/', (req, res) => {

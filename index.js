@@ -215,64 +215,59 @@ async function synchronizujXmlFeedy() {
             const response = await axios.get(prodejce.xml_url);
             let surovaXmlData = response.data;
 
-            if (typeof surovaXmlData === 'string') {
-                surovaXmlData = surovaXmlData.replace(/\r/g, "");
-            } else {
-                console.error('[XML STAHOVAČ] Data nejsou textový řetězec.');
+            if (typeof surovaXmlData !== 'string') {
+                console.error('[XML STAHOVAČ] Data nejsou validní text.');
                 continue;
             }
 
+            surovaXmlData = surovaXmlData.replace(/\r/g, "");
+
             // Rozdělení feedu podle Heureka tagu <SHOPITEM> nebo Google tagu <item>
             let polozky = [];
-            if (surovaXmlData.includes('<SHOPITEM>') || surovaXmlData.includes('<shopitem>')) {
+            if (surovaXmlData.toLowerCase().includes('<shopitem>')) {
                 polozky = surovaXmlData.split(/<SHOPITEM>/i);
-            } else if (surovaXmlData.includes('<item>') || surovaXmlData.includes('<ITEM>')) {
+            } else if (surovaXmlData.toLowerCase().includes('<item>')) {
                 polozky = surovaXmlData.split(/<item>/i);
             }
             polozky.shift(); 
 
-            console.log(`[XML STAHOVAČ] Staženo. Rozpoznán formát. Zpracovávám ${polozky.length} položek.`);
+            console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
             for (const polozka of polozky) {
-                // Univerzální vyhledávač, který najde Heureka tag, Google tag s dvojtečkou i Facebook tag
-                const dejTag = (text, tagHeureka, tagGoogle) => {
-                    let match = text.match(new RegExp(`<${tagHeureka}>([\\s\\S]*?)</${tagHeureka}>`, 'i'));
-                    if (!match && tagGoogle) {
-                        match = text.match(new RegExp(`<${tagGoogle}>([\\s\\S]*?)</${tagGoogle}>`, 'i'));
-                    }
-                    return match && match[1] ? match[1].trim() : "";
+                // NEPRŮSTŘELNÝ VYHLEDÁVAČ: Ignoruje velikost písmen a najde Heureka i Google tagy (id, g:id, G:ID)
+                const najdiObsahTagu = (text, nazevTagu) => {
+                    // Vytvoříme regulární výraz, který najde <tag>, <g:tag>, <G:TAG> i <G:IMAGE_LINK>
+                    const reg = new RegExp(`<([a-zA-Z]*:)?${nazevTagu}>([\\s\\S]*?)</([a-zA-Z]*:)?${nazevTagu}>`, 'i');
+                    const match = text.match(reg);
+                    return match && match[2] ? match[2].trim() : "";
                 };
 
-                // Extrakce hodnot s podporou obou standardů (Heureka vs Google/Facebook Merchant)
-                const item_id = dejTag(polozka, 'ITEM_ID', 'g:id');
-                const nazev = dejTag(polozka, 'PRODUCTNAME', 'g:title');
-                let cenaSurova = dejTag(polozka, 'PRICE_VAT', 'g:price');
-                const popis = dejTag(polozka, 'DESCRIPTION', 'g:description');
-                let obrazek = dejTag(polozka, 'IMGURL', 'g:image_link');
+                const item_id = najdiObsahTagu(polozka, 'id') || najdiObsahTagu(polozka, 'item_id');
+                const nazev = najdiObsahTagu(polozka, 'title') || najdiObsahTagu(polozka, 'productname') || najdiObsahTagu(polozka, 'product');
+                let cenaText = najdiObsahTagu(polozka, 'price') || najdiObsahTagu(polozka, 'price_vat') || najdiObsahTagu(polozka, 'cena_doporucena_s_dph');
+                const popis = najdiObsahTagu(polozka, 'description');
+                let obrazek = najdiObsahTagu(polozka, 'image_link') || najdiObsahTagu(polozka, 'imgurl') || najdiObsahTagu(polozka, 'imgurl_no_water');
 
                 if (!item_id || !nazev) continue;
 
-                // Očištění ceny (Google feedy posílají text např. "190.00 CZK")
+                // Očištění ceny od textu "CZK" nebo mezer
                 let cena = 0;
-                if (cenaSurova) {
-                    cenaSurova = cenaSurova.replace(/[a-zA-Z\s]/g, ''); // Odstraní "CZK"
-                    cena = parseFloat(cenaSurova) || 0;
+                if (cenaText) {
+                    const cistaCena = cenaText.replace(/[a-zA-Z\s]/g, '').replace(',', '.');
+                    cena = parseFloat(cistaCena) || 0;
                 }
 
-                // Skladovost (pokud u Google feedu chybí přesné číslo, nastavíme bezpečně 5 kusů)
-                let sklad = 5;
-                const matchSklad = polozka.match(/<STOCK>([\s\S]*?)<\/STOCK>/i);
-                if (matchSklad && matchSklad[1]) {
-                    sklad = parseInt(matchSklad[1].trim()) || 0;
-                }
+                // Skladovost (pokud u Google feedu chybí, dáme bezpečně 5 kusů)
+                let skladText = najdiObsahTagu(polozka, 'stock') || najdiObsahTagu(polozka, 'skladovost');
+                let sklad = skladText ? parseInt(skladText) : 5;
 
                 if (obrazek) {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Parsováno: "${nazev.substring(0, 30)}...", Cena: ${cena} Kč, Foto: ${obrazek ? 'ANO' : 'NE'}`);
+                console.log(`[XML STAHOVAČ] Naskladňuji: "${nazev.substring(0, 30)}...", Foto URL: ${obrazek}`);
 
-                // Bezpečný zápis do Supabase
+                // Zápis do Supabase
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({
@@ -286,7 +281,7 @@ async function synchronizujXmlFeedy() {
                     }, { onConflict: 'item_id' });
 
                 if (upsertError) {
-                    console.error(`[XML STAHOVAČ] Chyba zápisu produktu ${nazev}:`, upsertError.message);
+                    console.error(`[XML STAHOVAČ] Chyba uložení produktu ${nazev}:`, upsertError.message);
                 }
             }
             console.log(`[XML STAHOVAČ] Internetová synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
@@ -296,9 +291,9 @@ async function synchronizujXmlFeedy() {
     }
 }
 
-
 // Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
+
 
 
 // ==========================================

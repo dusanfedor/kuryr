@@ -212,25 +212,36 @@ async function synchronizujXmlFeedy() {
             const response = await axios.get(prodejce.xml_url);
             const surovaXmlData = response.data;
 
-            const polozky = surovaXmlData.split('<SHOPITEM>');
+            // Rozdělíme feed bez ohledu na to, zda je SHOPITEM velkými nebo malými písmeny
+            const polozky = surovaXmlData.split(/<SHOPITEM>/i);
             polozky.shift(); 
 
             for (const polozka of polozky) {
-                const item_id = polozka.substring(polozka.indexOf('<ITEM_ID>') + 9, polozka.indexOf('</ITEM_ID>')).trim();
-                const nazev = polozka.substring(polozka.indexOf('<PRODUCTNAME>') + 13, polozka.indexOf('</PRODUCTNAME>')).trim();
-                const cena = parseFloat(polozka.substring(polozka.indexOf('<PRICE_VAT>') + 11, polozka.indexOf('</PRICE_VAT>')));
-                const sklad = parseInt(polozka.substring(polozka.indexOf('<STOCK>') + 7, polozka.indexOf('</STOCK>')));
+                // Neprůstřelné vytažení textu mezi značkami pomocí regulárních výrazů (včetně konců řádků)
+                const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/i);
+                const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/i);
+                const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/i);
+                const matchSklad = polozka.match(/<STOCK>([\s\S]*?)<\/STOCK>/i);
+                const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/i);
+                const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/i);
+
+                // Pokud chybí kritické parametry, přeskočíme poškozenou položku
+                if (!matchId || !matchNazev) continue;
+
+                const item_id = matchId[1].trim();
+                const nazev = matchNazev[1].trim();
+                const cena = matchCena ? parseFloat(matchCena[1].trim()) : 0;
+                const sklad = matchSklad ? parseInt(matchSklad[1].trim()) : 0;
+                const popis = matchPopis ? matchPopis[1].trim() : "";
                 
-                let popis = "";
-                if (polozka.includes('<DESCRIPTION>')) {
-                    popis = polozka.substring(polozka.indexOf('<DESCRIPTION>') + 13, polozka.indexOf('</DESCRIPTION>')).trim();
+                let obrazek = matchObrazek ? matchObrazek[1].trim() : "";
+                if (obrazek) {
+                    // Odstraníme XML kódování ampersandu na klasické internetové &
+                    obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                let obrazek = "";
-                if (polozka.includes('<IMGURL>')) {
-                    obrazek = polozka.substring(polozka.indexOf('<IMGURL>') + 8, polozka.indexOf('</IMGURL>')).trim();
-                }
-                 if (obrazek) obrazek = obrazek.replace(/&amp;/g, '&');
+                console.log(`[XML STAHOVAČ] Zpracovávám: "${nazev}", Foto: ${obrazek ? 'ANO' : 'NE'}`);
+
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({

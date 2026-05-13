@@ -210,23 +210,25 @@ async function synchronizujXmlFeedy() {
             console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed pro: ${prodejce.jmeno}`);
             
             const response = await axios.get(prodejce.xml_url);
-            const surovaXmlData = response.data;
+            let surovaXmlData = response.data;
 
-            const polozky = surovaXmlData.split(/<SHOPITEM>/i);
+            // Vyčištění skrytých Windows konců řádků, aby regulární výrazy spolehlivě zabraly
+            surovaXmlData = surovaXmlData.replace(/\r/g, "");
+
+            // Rozdělení podle přesného Heureka tagu, který máš ve svém souboru xml
+            const polozky = surovaXmlData.split('<SHOPITEM>');
             polozky.shift(); 
 
             console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
-                      for (const polozka of polozky) {
-                // Neprůstřelné vytažení obsahu uvnitř značek (index [1] bere čistý vnitřek)
-                const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/i);
-                const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/i);
-                const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/i);
-                const matchSklad = polozka.match(/<STOCK>([\s\S]*?)<\/STOCK>/i);
-                const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/i);
-                const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/i);
+            for (const polozka of polozky) {
+                const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/);
+                const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/);
+                const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/);
+                const matchSklad = polozka.match(/<STOCK>([\s\S]*?)<\/STOCK>/);
+                const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/);
+                const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/);
 
-                // Pokud chybí kritické parametry, přeskočíme položku
                 if (!matchId || !matchNazev) continue;
 
                 const item_id = matchId[1].trim();
@@ -237,7 +239,6 @@ async function synchronizujXmlFeedy() {
                 
                 let obrazek = matchObrazek ? matchObrazek[1].trim() : "";
                 if (obrazek) {
-                    // Převod XML ampersandu na klasické internetové &
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
@@ -267,6 +268,7 @@ async function synchronizujXmlFeedy() {
         console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
     }
 }
+
 
 
 // Spustíme stahování automaticky 10 vteřin po startu serveru

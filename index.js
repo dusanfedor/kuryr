@@ -212,14 +212,12 @@ async function synchronizujXmlFeedy() {
             const response = await axios.get(prodejce.xml_url);
             const surovaXmlData = response.data;
 
-            // Rozdělíme feed bez ohledu na velikost písmen v SHOPITEM
             const polozky = surovaXmlData.split(/<SHOPITEM>/i);
             polozky.shift(); 
 
             console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
             for (const polozka of polozky) {
-                // Správné vytažení textu uvnitř závorek ([1]) pomocí regulárních výrazů
                 const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/i);
                 const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/i);
                 const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/i);
@@ -229,7 +227,7 @@ async function synchronizujXmlFeedy() {
 
                 if (!matchId || !matchNazev) continue;
 
-                // Přidáno [1] pro správné vytažení textu z pole regulárního výrazu
+                // OPRAVENO: Správné vytažení textu z pole regulárního výrazu přes index [1]
                 const item_id = matchId[1].trim();
                 const nazev = matchNazev[1].trim();
                 const cena = matchCena ? parseFloat(matchCena[1].trim()) : 0;

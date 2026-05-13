@@ -230,7 +230,7 @@ async function synchronizujXmlFeedy() {
                 if (polozka.includes('<IMGURL>')) {
                     obrazek = polozka.substring(polozka.indexOf('<IMGURL>') + 8, polozka.indexOf('</IMGURL>')).trim();
                 }
-
+                 if (obrazek) obrazek = obrazek.replace(/&amp;/g, '&');
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({

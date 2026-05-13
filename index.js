@@ -195,7 +195,40 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
 // ==========================================
 // AUTOMATICKÝ INTERNETOVÝ XML STAHOVAČ
 // ==========================================
-                       console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
+     // ==========================================
+// AUTOMATICKÝ INTERNETOVÝ XML STAHOVAČ
+// ==========================================
+async function synchronizujXmlFeedy() {
+    console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
+    
+    try {
+        // 1. Vytáhneme ze Supabase prodejce, kteří mají vyplněnou URL adresu feedu
+        const { data: prodejci, error: dbError } = await supabase
+            .from('prodejci')
+            .select('id, jmeno, xml_url')
+            .not('xml_url', 'is', null);
+
+        if (dbError) throw dbError;
+
+        for (const prodejce of prodejci) {
+            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed pro: ${prodejce.jmeno}`);
+            
+            const response = await axios.get(prodejce.xml_url);
+            let surovaXmlData = response.data;
+
+            // Vyčištění skrytých Windows konců řádků, aby regulární výrazy spolehlivě zabraly
+            if (typeof surovaXmlData === 'string') {
+                surovaXmlData = surovaXmlData.replace(/\r/g, "");
+            } else {
+                console.error('[XML STAHOVAČ] Stažená data nejsou textový řetězec.');
+                continue;
+            }
+
+            // Rozdělení podle přesného Heureka tagu, který máš ve svém souboru xml
+            const polozky = surovaXmlData.split('<SHOPITEM>');
+            polozky.shift(); 
+
+            console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
             for (const polozka of polozky) {
                 // Hledání XML značek v textu položky
@@ -209,9 +242,9 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
                 // BEZPEČNOSTNÍ POJISTKA: Pokud chybí kritické parametry ID nebo Název, položku přeskočíme
                 if (!matchId || !matchNazev) continue;
 
-                // Bezpečné vytažení čistého textu z indexu [1] pouze pokud značka ve feedu reálně existuje
-                const item_id = matchId[1] ? matchId[1].trim() : "";
-                const nazev = matchNazev[1] ? matchNazev[1].trim() : "";
+                // Bezpečné vytažení čistého textu z indexu [1] s ochranou proti null
+                const item_id = matchId && matchId[1] ? matchId[1].trim() : "";
+                const nazev = matchNazev && matchNazev[1] ? matchNazev[1].trim() : "";
                 const cena = matchCena && matchCena[1] ? parseFloat(matchCena[1].trim()) : 0;
                 const sklad = matchSklad && matchSklad[1] ? parseInt(matchSklad[1].trim()) : 0;
                 const popis = matchPopis && matchPopis[1] ? matchPopis[1].trim() : "";
@@ -222,9 +255,9 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Načteno z internetu: "${nazev}", Foto URL: ${obrazek}`);
+                console.log(`[XML STAHOVAČ] Načteno z internetu: "${nazev}", Foto URL: ${obrazek ? 'ANO' : 'NE'}`);
 
-                // Bezpečný zápis do databáze v Supabase
+                // Bezpečný zápis do databáze v Supabase (v asynchronním kontextu cyklu)
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({
@@ -241,13 +274,16 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
                     console.error(`[XML STAHOVAČ] Chyba uložení produktu ${nazev}:`, upsertError.message);
                 }
             }
-
-
-
-
+            console.log(`[XML STAHOVAČ] Internetová synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
+        }
+    } catch (err) {
+        console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
+    }
+}
 
 // Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
+
 
 // ==========================================
 // SAMOTNÝ START SERVERU (Úplný konec souboru)

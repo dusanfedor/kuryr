@@ -199,10 +199,10 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
     console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
     
     try {
+               // OPRAVA: Stáhneme celou tabulku prodejců natvrdo a bez filtrů!
         const { data: prodejci, error: dbError } = await supabase
             .from('prodejci')
-            .select('id, jmeno, xml_url')
-            .not('xml_url', 'is', null);
+            .select('id, jmeno, xml_url');
 
         if (dbError) {
             console.error('[XML STAHOVAČ] Chyba Supabase při načítání:', dbError.message);

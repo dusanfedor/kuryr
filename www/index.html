@@ -29,9 +29,22 @@
         .order-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 0.9rem; margin-bottom: 8px; }
         .btn-order { width: 100%; padding: 10px; background: #ffc107; color: var(--dark); border: none; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; }
         #status { height: 25px; margin-top: 20px; color: #666; font-weight: 500; }
+                /* Styly pro modální okno zvětšeného obrázku */
+        .lightbox-modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease; }
+        .lightbox-modal.show { display: flex; opacity: 1; }
+        .lightbox-img { max-width: 90%; max-height: 80%; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.5); transform: scale(0.9); transition: transform 0.3s ease; }
+        .lightbox-modal.show .lightbox-img { transform: scale(1); }
+        .product-img { cursor: pointer; transition: transform 0.2s ease; }
+        .product-img:hover { transform: scale(1.05); }
+
     </style>
 </head>
 <body>
+        <!-- Skrytá vrstva pro zvětšený obrázek -->
+    <div id="lightbox" class="lightbox-modal" onclick="zavriLightbox()">
+        <img id="lightbox-target" class="lightbox-img" src="" alt="Zvětšený náhled">
+    </div>
+
     <!-- Horní navigační lišta pro okamžitý skok do dispečinku -->
     <div class="nav-bar">
         <a href="/" class="nav-link active">🛒 Zákazník (Hledat)</a>
@@ -194,6 +207,18 @@
                 }
             };
         }
+                function otevriLightbox(src) {
+            const modal = document.getElementById('lightbox');
+            const img = document.getElementById('lightbox-target');
+            img.src = src;
+            modal.classList.add('show');
+        }
+
+        function zavriLightbox() {
+            const modal = document.getElementById('lightbox');
+            modal.classList.remove('show');
+        }
+
     </script>
 </body>
 </html>

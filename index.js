@@ -198,6 +198,9 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
      // ==========================================
 // AUTOMATICKÝ INTERNETOVÝ XML STAHOVAČ
 // ==========================================
+// ==========================================
+// AUTOMATICKÝ INTERNETOVÝ XML STAHOVAČ (LOKÁLNÍ ČTENÍ SOUBORU)
+// ==========================================
 async function synchronizujXmlFeedy() {
     console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
     
@@ -210,20 +213,21 @@ async function synchronizujXmlFeedy() {
         if (dbError) throw dbError;
 
         for (const prodejce of prodejci) {
-            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed pro: ${prodejce.jmeno}`);
+            console.log(`[XML STAHOVAČ] Čtu lokální soubor ze složky www pro: ${prodejce.jmeno}`);
             
-            // OPRAVA: Maskujeme se jako běžný webový prohlížeč Chrome, aby nás server Catherine Life nezablokoval
-            const response = await axios.get(prodejce.xml_url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-                }
-            });
+            // NEPRŮSTŘELNÁ OPRAVA: Místo stahování z internetu načteme nahraný soubor přímo z disku
+            const fs = require('fs');
+            let surovaXmlData;
             
-            let surovaXmlData = response.data;
+            try {
+                surovaXmlData = fs.readFileSync(path.join(__dirname, 'www', 'catherine.xml'), 'utf-8');
+            } catch (fsError) {
+                console.error(`[XML STAHOVAČ] SOUBOR NEBYL NALEZEN! Ujisti se, že máš soubor v www/catherine.xml:`, fsError.message);
+                continue;
+            }
 
             if (typeof surovaXmlData !== 'string') {
-                console.error('[XML STAHOVAČ] Data nejsou validní text.');
+                console.error('[XML STAHOVAČ] Data ze souboru nejsou validní text.');
                 continue;
             }
 
@@ -233,7 +237,7 @@ async function synchronizujXmlFeedy() {
             const polozky = surovaXmlData.split(/<item>/i);
             polozky.shift(); 
 
-            console.log(`[XML STAHOVAČ] Staženo z internetu. Zpracovávám ${polozky.length} položek z feedu.`);
+            console.log(`[XML STAHOVAČ] Soubor úspěšně přečten. Zpracovávám ${polozky.length} položek.`);
 
             for (const polozka of polozky) {
                 // Stabilní textová extrakce bez pádů polí
@@ -245,7 +249,7 @@ async function synchronizujXmlFeedy() {
                     if (startPos !== -1 && endPos !== -1) {
                         return text.substring(startPos + startTag.length, endPos).trim();
                     }
-                    // Zkusíme i verzi s VELKÝMI písmeny pro specifické formáty
+                    // Zkusíme i verzi s VELKÝMI písmeny pro specifické formáty (např. G:IMAGE_LINK)
                     const startTagUpper = `<${tag.toUpperCase()}>`;
                     const endTagUpper = `</${tag.toUpperCase()}>`;
                     const startPosUpper = text.indexOf(startTagUpper);
@@ -275,7 +279,7 @@ async function synchronizujXmlFeedy() {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Úspěšně načteno: "${nazev.substring(0, 30)}...", Foto: ${obrazek ? 'ANO' : 'NE'}`);
+                console.log(`[XML STAHOVAČ] Naskladňuji z disku: "${nazev.substring(0, 30)}...", Foto: ${obrazek ? 'ANO' : 'NE'}`);
 
                 // Uložení (UPSERT) do Supabase
                 const { error: upsertError } = await supabase
@@ -291,10 +295,10 @@ async function synchronizujXmlFeedy() {
                     }, { onConflict: 'item_id' });
 
                 if (upsertError) {
-                    console.error(`[XML STAHOVAČ] Chyba zápisu produktu:`, upsertError.message);
+                    console.error(`[XML STAHOVAČ] Chyba zápisu produktu do Supabase:`, upsertError.message);
                 }
             }
-            console.log(`[XML STAHOVAČ] Internetová synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
+            console.log(`[XML STAHOVAČ] Lokální synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
         }
     } catch (err) {
         console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
@@ -303,7 +307,6 @@ async function synchronizujXmlFeedy() {
 
 // Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
-
 
 
 // ==========================================

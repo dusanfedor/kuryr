@@ -218,46 +218,61 @@ async function synchronizujXmlFeedy() {
             if (typeof surovaXmlData === 'string') {
                 surovaXmlData = surovaXmlData.replace(/\r/g, "");
             } else {
-                console.error('[XML STAHOVAČ] Data nejsou validní text.');
+                console.error('[XML STAHOVAČ] Data nejsou textový řetězec.');
                 continue;
             }
 
-                        // OPRAVA: Rozdělí feed bez ohledu na to, zda je SHOPITEM velkými nebo malými písmeny (/i)
-            const polozky = surovaXmlData.split(/<SHOPITEM>/i);
-
+            // Rozdělení feedu podle Heureka tagu <SHOPITEM> nebo Google tagu <item>
+            let polozky = [];
+            if (surovaXmlData.includes('<SHOPITEM>') || surovaXmlData.includes('<shopitem>')) {
+                polozky = surovaXmlData.split(/<SHOPITEM>/i);
+            } else if (surovaXmlData.includes('<item>') || surovaXmlData.includes('<ITEM>')) {
+                polozky = surovaXmlData.split(/<item>/i);
+            }
             polozky.shift(); 
 
-            console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
+            console.log(`[XML STAHOVAČ] Staženo. Rozpoznán formát. Zpracovávám ${polozky.length} položek.`);
 
             for (const polozka of polozky) {
-                // Univerzální funkce pro vytahování značek z obou formátů e-shopů
-                const dejHodnotu = (text, hlavniTag, alternativniTag) => {
-                    let match = text.match(new RegExp(`<${hlavniTag}>([\\s\\S]*?)</${hlavniTag}>`, 'i'));
-                    if (!match && alternativniTag) {
-                        match = text.match(new RegExp(`<${alternativniTag}>([\\s\\S]*?)</${alternativniTag}>`, 'i'));
+                // Univerzální vyhledávač, který najde Heureka tag, Google tag s dvojtečkou i Facebook tag
+                const dejTag = (text, tagHeureka, tagGoogle) => {
+                    let match = text.match(new RegExp(`<${tagHeureka}>([\\s\\S]*?)</${tagHeureka}>`, 'i'));
+                    if (!match && tagGoogle) {
+                        match = text.match(new RegExp(`<${tagGoogle}>([\\s\\S]*?)</${tagGoogle}>`, 'i'));
                     }
                     return match && match[1] ? match[1].trim() : "";
                 };
 
-                // Načteme data - pokud nenajde standardní tag, zkusí verzi od Viakomu
-                const item_id = dejHodnotu(polozka, 'ITEM_ID', 'ID_PRODUCT');
-                const nazev = dejHodnotu(polozka, 'PRODUCTNAME', 'PRODUCT');
-                const cenaText = dejHodnotu(polozka, 'PRICE_VAT', 'CENA_DOPORUCENA_S_DPH');
-                const skladText = dejHodnotu(polozka, 'STOCK', 'SKLADOVOST');
-                const popis = dejHodnotu(polozka, 'DESCRIPTION');
-                let obrazek = dejHodnotu(polozka, 'IMGURL', 'IMGURL_NO_WATER');
+                // Extrakce hodnot s podporou obou standardů (Heureka vs Google/Facebook Merchant)
+                const item_id = dejTag(polozka, 'ITEM_ID', 'g:id');
+                const nazev = dejTag(polozka, 'PRODUCTNAME', 'g:title');
+                let cenaSurova = dejTag(polozka, 'PRICE_VAT', 'g:price');
+                const popis = dejTag(polozka, 'DESCRIPTION', 'g:description');
+                let obrazek = dejTag(polozka, 'IMGURL', 'g:image_link');
 
                 if (!item_id || !nazev) continue;
 
-                const cena = cenaText ? parseFloat(cenaText) : 0;
-                const sklad = skladText ? parseInt(skladText) : 0;
+                // Očištění ceny (Google feedy posílají text např. "190.00 CZK")
+                let cena = 0;
+                if (cenaSurova) {
+                    cenaSurova = cenaSurova.replace(/[a-zA-Z\s]/g, ''); // Odstraní "CZK"
+                    cena = parseFloat(cenaSurova) || 0;
+                }
+
+                // Skladovost (pokud u Google feedu chybí přesné číslo, nastavíme bezpečně 5 kusů)
+                let sklad = 5;
+                const matchSklad = polozka.match(/<STOCK>([\s\S]*?)<\/STOCK>/i);
+                if (matchSklad && matchSklad[1]) {
+                    sklad = parseInt(matchSklad[1].trim()) || 0;
+                }
 
                 if (obrazek) {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Načteno z internetu: "${nazev}", Foto: ${obrazek ? 'ANO' : 'NE'}`);
+                console.log(`[XML STAHOVAČ] Parsováno: "${nazev.substring(0, 30)}...", Cena: ${cena} Kč, Foto: ${obrazek ? 'ANO' : 'NE'}`);
 
+                // Bezpečný zápis do Supabase
                 const { error: upsertError } = await supabase
                     .from('produkty')
                     .upsert({
@@ -271,7 +286,7 @@ async function synchronizujXmlFeedy() {
                     }, { onConflict: 'item_id' });
 
                 if (upsertError) {
-                    console.error(`[XML STAHOVAČ] Chyba uložení produktu ${nazev}:`, upsertError.message);
+                    console.error(`[XML STAHOVAČ] Chyba zápisu produktu ${nazev}:`, upsertError.message);
                 }
             }
             console.log(`[XML STAHOVAČ] Internetová synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);

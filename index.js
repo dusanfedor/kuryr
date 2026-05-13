@@ -222,11 +222,15 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
                 console.error(`[XML STAHOVAČ] KRITICKÁ CHYBA: Soubor catherine.xml nebyl v www složce nalezen!`, fsError.message);
                 continue;
             }
-
-            surovaXmlData = surovaXmlData.replace(/\r/g, "");
-
-            // Rozdělení podle Google/Facebook tagu <item>
-            const polozky = surovaXmlData.split(/<item>/i);
+            // OPRAVA: Inteligentní detekce formátu (Heureka <SHOPITEM> vs Google <item>) uvnitř staženého souboru
+            let polozky = [];
+            if (surovaXmlData.toLowerCase().includes('<shopitem>')) {
+                polozky = surovaXmlData.split(/<SHOPITEM>/i);
+                console.log(`[XML STAHOVAČ] Detekován formát Heureka (SHOPITEM).`);
+            } else if (surovaXmlData.toLowerCase().includes('<item>')) {
+                polozky = surovaXmlData.split(/<item>/i);
+                console.log(`[XML STAHOVAČ] Detekován formát Google/Facebook (item).`);
+            }
             polozky.shift(); 
 
             console.log(`[XML STAHOVAČ] Soubor catherine.xml úspěšně načten. Zpracovávám ${polozky.length} položek.`);

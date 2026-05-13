@@ -5,17 +5,15 @@
         <PRODUCTNAME>Bílé botasky Nike Air Max</PRODUCTNAME>
         <PRICE_VAT>2990</PRICE_VAT>
         <STOCK>12</STOCK>
-        <DESCRIPTION>Skladem v Holešovicích</DESCRIPTION>
-        <!-- REÁLNÁ FOTKA NIKE -->
-        <IMGURL>unsplash.com</IMGURL>
+        <DESCRIPTION>Stylové a pohodlné kožené sportovní boty Nike Air Max v čistě bílém provedení. Vzduchová kapsa pro maximální tlumení nárazů. Skladem na prodejně v Holešovicích.</DESCRIPTION>
+        <IMGURL>https://unsplash.com</IMGURL>
     </SHOPITEM>
     <SHOPITEM>
         <ITEM_ID>adidas-superstar-02</ITEM_ID>
-        <PRODUCTNAME>Černes tenisky Adidas Superstar</PRODUCTNAME>
+        <PRODUCTNAME>Černé tenisky Adidas Superstar</PRODUCTNAME>
         <PRICE_VAT>1990</PRICE_VAT>
         <STOCK>4</STOCK>
-        <DESCRIPTION>Skladem na prodejně na Stromovce</DESCRIPTION>
-        <!-- REÁLNÁ FOTKA ADIDAS -->
-        <IMGURL>unsplash.com</IMGURL>
+        <DESCRIPTION>Klasické retro boty Adidas Superstar, černá barva s ikonickými třemi bílými pruhy a gumovou špičkou. Legendární design pro každodenní nošení. Skladem na prodejně na Stromovce.</DESCRIPTION>
+        <IMGURL>https://unsplash.com</IMGURL>
     </SHOPITEM>
 </SHOP>

@@ -195,33 +195,10 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
 // ==========================================
 // AUTOMATICKÝ INTERNETOVÝ XML STAHOVAČ
 // ==========================================
-async function synchronizujXmlFeedy() {
-    console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
-    
-    try {
-        const { data: prodejci, error: dbError } = await supabase
-            .from('prodejci')
-            .select('id, jmeno, xml_url')
-            .not('xml_url', 'is', null);
-
-        if (dbError) throw dbError;
-
-        for (const prodejce of prodejci) {
-            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed pro: ${prodejce.jmeno}`);
-            
-            const response = await axios.get(prodejce.xml_url);
-            let surovaXmlData = response.data;
-
-            // Vyčištění skrytých Windows konců řádků, aby regulární výrazy spolehlivě zabraly
-            surovaXmlData = surovaXmlData.replace(/\r/g, "");
-
-            // Rozdělení podle přesného Heureka tagu, který máš ve svém souboru xml
-            const polozky = surovaXmlData.split('<SHOPITEM>');
-            polozky.shift(); 
-
             console.log(`[XML STAHOVAČ] Staženo. Zpracovávám ${polozky.length} položek z feedu.`);
 
             for (const polozka of polozky) {
+                // Vytahujeme obsahy značek do polí
                 const matchId = polozka.match(/<ITEM_ID>([\s\S]*?)<\/ITEM_ID>/);
                 const matchNazev = polozka.match(/<PRODUCTNAME>([\s\S]*?)<\/PRODUCTNAME>/);
                 const matchCena = polozka.match(/<PRICE_VAT>([\s\S]*?)<\/PRICE_VAT>/);
@@ -229,8 +206,10 @@ async function synchronizujXmlFeedy() {
                 const matchPopis = polozka.match(/<DESCRIPTION>([\s\S]*?)<\/DESCRIPTION>/);
                 const matchObrazek = polozka.match(/<IMGURL>([\s\S]*?)<\/IMGURL>/);
 
+                // Pokud chybí ID nebo Název, bezpečně přeskočíme položku
                 if (!matchId || !matchNazev) continue;
 
+                // TADY JE TA OPRAVA: Bereme index [1], což je čistý text uvnitř XML značek!
                 const item_id = matchId[1].trim();
                 const nazev = matchNazev[1].trim();
                 const cena = matchCena ? parseFloat(matchCena[1].trim()) : 0;
@@ -242,7 +221,7 @@ async function synchronizujXmlFeedy() {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Zpracovávám: "${nazev}", Foto URL: ${obrazek}`);
+                console.log(`[XML STAHOVAČ] Úspěšně načteno: "${nazev}", Foto URL: ${obrazek}`);
 
                 // Naskladnění do Supabase
                 const { error: upsertError } = await supabase
@@ -262,12 +241,6 @@ async function synchronizujXmlFeedy() {
                 }
             }
 
-            console.log(`[XML STAHOVAČ] Internetová synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
-        }
-    } catch (err) {
-        console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
-    }
-}
 
 
 

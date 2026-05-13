@@ -105,14 +105,18 @@
             status.innerText = "🔴 Poslouchám...";
             recognition.start();
 
-            recognition.onresult = async (event) => {
+             recognition.onresult = async (event) => {
+                // Neprůstřelné vytažení textu z hlasového eventu pro mobily i PC
                 let hlasovyText = "";
-                if (event.results && event.results) {
+                if (event.results && event.results[0] && event.results[0][0]) {
+                    hlasovyText = event.results[0][0].transcript;
+                } else if (event.results && event.results.transcript) {
                     hlasovyText = event.results.transcript;
                 }
                 
                 let textCisty = hlasovyText.replace(/[.]/g, "").trim().toLowerCase();
                 status.innerText = `Hledám: "${textCisty}"`;
+
 
                 let latitude = 50.1015;
                 let longitude = 14.4455;

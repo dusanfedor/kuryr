@@ -20,19 +20,19 @@
         #map { height: 300px; width: 100%; border-radius: 15px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: none; }
         #status { height: 25px; margin-top: 20px; color: #666; font-weight: 500; }
         
-        /* Základní karta s jedním náhledovým obrázkem */
+        /* Čistá minimalistická karta s jedním náhledovým obrázkem */
         .prodejce-karta { background: white; border-radius: 15px; padding: 15px; margin-top: 15px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 15px; }
-        .product-img-preview { width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.2s ease; }
+        .product-img-preview { width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.2s ease; background: #e9ecef; }
         .product-img-preview:hover { transform: scale(1.05); }
 
         /* GIGANTICKÉ DETAILNÍ OKNO (Zobrazí se po kliknutí na fotku) */
-        .detail-modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 15px; box-sizing: border-box; }
+        .detail-modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; padding: 15px; box-sizing: border-box; }
         .detail-modal.show { display: flex; }
         .detail-obsah { background: #ffffff; width: 100%; max-width: 440px; border-radius: 16px; padding: 20px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.3); position: relative; }
         .close-btn { position: absolute; top: 12px; right: 15px; font-size: 1.5rem; font-weight: bold; color: #aaa; cursor: pointer; border: none; background: none; }
         
         .modal-image-container { width: 100%; background: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; padding: 10px; box-sizing: border-box; display: flex; justify-content: center; margin-bottom: 15px; }
-        .modal-product-img { max-width: 100%; height: 200px; object-fit: contain; }
+        .modal-product-img { max-width: 100%; height: 220px; object-fit: contain; }
         .modal-title { font-size: 1.3rem; font-weight: 700; color: #111; margin: 0 0 5px 0; line-height: 1.3; }
         .modal-price { font-size: 1.4rem; font-weight: 800; color: #000; margin: 10px 0; }
         
@@ -46,8 +46,8 @@
         .order-section { margin-top: 15px; padding-top: 15px; border-top: 1px dashed #dddddd; }
         .order-input { width: 100%; padding: 12px; border: 1px solid #cccccc; border-radius: 6px; box-sizing: border-box; font-size: 0.9rem; margin-bottom: 10px; }
         .btn-order { width: 100%; padding: 14px; background: #ffc107; color: #111; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; }
-            .footer-credit { font-size: 0.8rem; color: #888888; margin-top: 30px; margin-bottom: 20px; font-weight: 500; text-align: center; width: 100%; letter-spacing: 0.5px; }
-
+        
+        .footer-credit { font-size: 0.85rem; color: #888888; margin-top: 30px; margin-bottom: 20px; font-weight: 500; text-align: center; width: 100%; letter-spacing: 0.5px; }
     </style>
 </head>
 <body>
@@ -70,7 +70,6 @@
         <button class="btn-voice" onclick="startHlas()">🎤 Hledat hlasem</button>
         <div id="map"></div>
         <div id="vysledky"></div>
-    </div>
     </div>
 
     <!-- Patička s podpisem autora -->
@@ -154,10 +153,21 @@
                         data.forEach(p => {
                             const navigaceUrl = `google.com{p.lat},${p.lng}`;
 
-                            // Do okna vyhledávače vygenerujeme POUZE čistou řádku s jednou vybranou fotkou produktu
+                            // ČISTÉ ADRESY: Bereme originální odkaz z databáze a zajišťujeme protokol https://
+                            let surovaAdresa = p.obrazek_url || '';
+                            let fotoAdresa = '';
+                            if (surovaAdresa.startsWith('http://') || surovaAdresa.startsWith('https://')) {
+                                fotoAdresa = surovaAdresa;
+                            } else if (surovaAdresa.trim() !== '') {
+                                fotoAdresa = 'https://' + surovaAdresa;
+                            } else {
+                                fotoAdresa = 'data:image/svg+xml;utf8,<svg xmlns="w3.org" width="85" height="85" viewBox="0 0 85 85"><rect width="85" height="85" fill="%23e9ecef"/><text x="50%" y="55%" font-family="sans-serif" font-size="24" text-anchor="middle">🖼️</text></svg>';
+                            }
+
+                            // Vykreslení čistého řádku s jednou fotkou pro vyhledávač
                             seznam.innerHTML += `
                                 <div class="prodejce-karta">
-                                    <img src="${p.obrazek_url}" class="product-img-preview" alt="Zboží" onclick="otevriDetail(${JSON.stringify(p).replace(/"/g, '&quot;')}, '${navigaceUrl}')">
+                                    <img src="${fotoAdresa}" class="product-img-preview" alt="Zboží" onclick="otevriDetail(${JSON.stringify(p).replace(/"/g, '&quot;')}, '${navigaceUrl}', '${fotoAdresa}')">
                                     <div style="flex-grow: 1; text-align: left;">
                                         <strong>📍 ${p.prodejce_jmeno}</strong><br>
                                         📦 ${p.nazev_produktu}<br>
@@ -182,14 +192,14 @@
             };
         }
 
-        // Tato funkce po kliknutí na fotku sestaví kompletní detailní kartu e-shopu do vyskakovacího okna
-               function otevriDetail(p, navigaceUrl) {
+        // Sestavení kompletní detailní karty s podpisem autora Dušana Fedora
+        function otevriDetail(p, navigaceUrl, fotoAdresa) {
             const modal = document.getElementById('detailModal');
             const obsah = document.getElementById('modalDynamickyObsah');
 
             obsah.innerHTML = `
                 <div class="modal-image-container">
-                    <img src="${p.obrazek_url}" class="modal-product-img" alt="Produkt">
+                    <img src="${fotoAdresa}" class="modal-product-img" alt="Produkt">
                 </div>
                 <h2 class="modal-title">${p.nazev_produktu}</h2>
                 <div class="modal-price">${p.cena} Kč</div>
@@ -197,8 +207,8 @@
                 <table class="vlastnosti-tabulka">
                     <tr><td class="label">Obchod</td><td class="value">📍 ${p.prodejce_jmeno}</td></tr>
                     <tr><td class="label">Dostupnost</td><td class="value" style="color: #28a745;">Skladem (${p.sklad} ks)</td></tr>
-                    <tr><td class="label">Materiál</td><td class="value">Zimní kolekce Catherine Life</td></tr>
-                    <tr><td class="label">Popis</td><td class="value" style="font-weight: 400; color: #555;">${p.popis || 'Detailní vlastnosti produktu.'}</td></tr>
+                    <tr><td class="label">Materiál</td><td class="value">Ostrá kolekce z XML feedu</td></tr>
+                    <tr><td class="label">Popis</td><td class="value" style="font-weight: 400; color: #555;">${p.popis || 'Detailní vlastnosti staženého zboží.'}</td></tr>
                     <tr><td class="label">Telefon</td><td class="value"><a href="tel:${p.telefon}" style="color: inherit; text-decoration: none;">${p.telefon}</a></td></tr>
                 </table>
 
@@ -207,14 +217,13 @@
                 <div class="order-section">
                     <input type="text" id="msg-${p.produkt_id}" class="order-input" placeholder="Vzkaz kurýrovi (např: Kasa 1, PIN: 1234)...">
                     <button class="btn-order" onclick="odeslatKuryrum(${p.produkt_id}, '${p.prodejce_id}')">💳 Koupit & volat kurýra</button>
-                    <!-- TADY JE TVŮJ NOVÝ PODPIS UVNITŘ OKNA: -->
+                    <!-- AUTORSKÝ PODPIS UVNITŘ KARTY -->
                     <div style="text-align: center; font-size: 0.75rem; color: #aaa; margin-top: 15px; font-weight: 500;">Autor platformy: Dušan Fedor</div>
                 </div>
             `;
 
             modal.classList.add('show');
         }
-
 
         function zavriDetail(e) {
             if (e.target.id === 'detailModal') {
@@ -224,3 +233,4 @@
     </script>
 </body>
 </html>
+

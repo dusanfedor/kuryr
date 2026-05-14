@@ -193,10 +193,10 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
 });
 
 // ==========================================
-// UNIVERZÁLNÍ LOKÁLNÍ XML PARSER BEZ SÍŤOVÝCH CHYB
+// ŽIVÝ STAHOVAČ TESTOVACÍHO HEUREKA SORTIMENTU
 // ==========================================
 async function synchronizujXmlFeedy() {
-    console.log('[XML STAHOVAČ] Startuji plnou kontrolu lokálních XML souborů...');
+    console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
     
     try {
         const { data: prodejci, error: dbError } = await supabase
@@ -206,62 +206,59 @@ async function synchronizujXmlFeedy() {
         if (dbError) throw dbError;
 
         for (const prodejce of prodejci) {
-            console.log(`[XML STAHOVAČ] Čtu soubor catherine.xml ze složky www pro: ${prodejce.jmeno}`);
+            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed z: ${prodejce.xml_url}`);
             
-            const fs = require('fs');
-            let surovaXmlData;
-            
+            let response;
             try {
-                surovaXmlData = fs.readFileSync(path.join(__dirname, 'www', 'catherine.xml'), 'utf-8');
-            } catch (fsError) {
-                console.error(`[XML STAHOVAČ] SOUBOR NEBYL NALEZEN v www/catherine.xml:`, fsError.message);
+                response = await axios.get(prodejce.xml_url, {
+                    timeout: 25000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    }
+                });
+            } catch (fetchError) {
+                console.error(`[XML STAHOVAČ] Nepodařilo se stáhnout feed z internetu:`, fetchError.message);
                 continue;
             }
+            
+            let surovaXmlData = response.data;
+            if (!surovaXmlData || typeof surovaXmlData !== 'string') continue;
 
             surovaXmlData = surovaXmlData.replace(/\r/g, "");
 
-            // Automatická detekce oddělovače položek (SHOPITEM nebo item)
-            let polozky = [];
-            if (surovaXmlData.includes('<SHOPITEM>') || surovaXmlData.includes('<shopitem>')) {
-                polozky = surovaXmlData.split(/<SHOPITEM>/i);
-            } else if (surovaXmlData.includes('<item>') || surovaXmlData.includes('<ITEM>')) {
-                polozky = surovaXmlData.split(/<item>/i);
-            }
+            // Rozdělení feedu podle standardního velkého i malého Heureka tagu <SHOPITEM>
+            const polozky = surovaXmlData.split(/<SHOPITEM>/i);
             polozky.shift(); 
 
-            console.log(`[XML STAHOVAČ] Soubor úspěšně přečten. Rozpoznáno ${polozky.length} položek.`);
+            console.log(`[XML STAHOVAČ] Úspěšně staženo z internetu. Zpracovávám ${polozky.length} položek.`);
 
-            for (const polozka of polozky) {
+            // Zpracujeme maximálně prvních 50 položek, ať nezahltíme paměť
+            const omezenyPocet = polozky.slice(0, 50);
+
+            for (const polozka of omezenyPocet) {
                 const extrahujTag = (text, tag) => {
                     const startTag = `<${tag}>`; const endTag = `</${tag}>`;
                     const startPos = text.indexOf(startTag); const endPos = text.indexOf(endTag);
                     if (startPos !== -1 && endPos !== -1) return text.substring(startPos + startTag.length, endPos).trim();
-                    const startTagUpper = `<${tag.toUpperCase()}>`; const endTagUpper = `</${tag.toUpperCase()}>`;
-                    const startPosUpper = text.indexOf(startTagUpper); const endPosUpper = text.indexOf(endTagUpper);
-                    if (startPosUpper !== -1 && endPosUpper !== -1) return text.substring(startPosUpper + startTagUpper.length, endPosUpper).trim();
                     return "";
                 };
 
-                // Podpora Heureka tagů i Google/Facebook Merchant tagů (g:id, g:title, atd.)
-                let item_id = extrahujTag(polozka, 'ITEM_ID') || extrahujTag(polozka, 'g:id') || extrahujTag(polozka, 'id');
-                let nazev = extrahujTag(polozka, 'PRODUCTNAME') || extrahujTag(polozka, 'g:title') || extrahujTag(polozka, 'title');
-                let cenaText = extrahujTag(polozka, 'PRICE_VAT') || extrahujTag(polozka, 'g:price') || extrahujTag(polozka, 'price');
-                let popis = extrahujTag(polozka, 'DESCRIPTION') || extrahujTag(polozka, 'g:description') || extrahujTag(polozka, 'description');
-                let obrazek = extrahujTag(polozka, 'IMGURL') || extrahujTag(polozka, 'g:image_link') || extrahujTag(polozka, 'image_link') || extrahujTag(polozka, 'G:IMAGE_LINK');
+                const item_id = extrahujTag(polozka, 'ITEM_ID');
+                const nazev = extrahujTag(polozka, 'PRODUCTNAME');
+                const cenaText = extrahujTag(polozka, 'PRICE_VAT');
+                const popis = extrahujTag(polozka, 'DESCRIPTION');
+                let obrazek = extrahujTag(polozka, 'IMGURL');
 
                 if (!item_id || !nazev) continue;
 
-                let cena = 0;
-                if (cenaText) {
-                    const cistaCena = cenaText.replace(/[a-zA-Z\s]/g, '').replace(',', '.');
-                    cena = parseFloat(cistaCena) || 0;
-                }
+                const cena = parseFloat(cenaText) || 0;
+                const sklad = parseInt(extrahujTag(polozka, 'STOCK')) || 5;
 
                 if (obrazek) {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Naskladňuji z disku: "${nazev.substring(0, 25)}...", Cena: ${cena} Kč`);
+                console.log(`[XML STAHOVAČ] Naskladňuji z internetu: "${nazev.substring(0, 25)}...", Cena: ${cena} Kč`);
 
                 await supabase
                     .from('produkty')
@@ -270,20 +267,21 @@ async function synchronizujXmlFeedy() {
                         item_id: item_id,
                         nazev: nazev,
                         cena: cena,
-                        sklad: 5,
+                        sklad: sklad,
                         popis: popis,       
                         obrazek: obrazek     
                     }, { onConflict: 'item_id' });
             }
-            console.log(`[XML STAHOVAČ] Synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
+            console.log(`[XML STAHOVAČ] Plná synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
         }
     } catch (err) {
-        console.error('[XML STAHOVAČ] Kritická chyba:', err.message);
+        console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
     }
 }
 
 // Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
+
 
 
 

@@ -202,7 +202,6 @@ async function synchronizujXmlFeedy() {
     const agent = new https.Agent({ rejectUnauthorized: false });
 
     try {
-        // Stáhneme z databáze seznam všech aktivních prodejců
         const { data: prodejci, error: dbError } = await supabase
             .from('prodejci')
             .select('id, jmeno, xml_url');
@@ -218,51 +217,54 @@ async function synchronizujXmlFeedy() {
             try {
                 response = await axios.get(prodejce.xml_url, {
                     httpsAgent: agent,
-                    timeout: 35000, // 35 vteřin limit na stažení jednoho e-shopu
+                    timeout: 30000,
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                     }
                 });
             } catch (fetchError) {
                 console.error(`[XML STAHOVAČ] Nepodařilo se stáhnout feed pro ${prodejce.jmeno}:`, fetchError.message);
-                continue; // Pokud jeden e-shop selže, kód se nenaštve a skočí na další v pořadí!
+                continue;
             }
             
             let surovaXmlData = response.data;
-            if (!surovaXmlData || typeof surovaXmlData !== 'string') {
-                console.error(`[XML STAHOVAČ] Data pro ${prodejce.jmeno} nejsou textový řetězec.`);
-                continue;
-            }
+            if (!surovaXmlData || typeof surovaXmlData !== 'string') continue;
 
             surovaXmlData = surovaXmlData.replace(/\r/g, "");
 
-            // Rozdělení feedu podle standardního Heureka tagu <SHOPITEM>
+            // Rozdělení feedu bez ohledu na velikost písmen (SHOPITEM / shopitem)
             const polozky = surovaXmlData.split(/<SHOPITEM>/i);
             polozky.shift(); 
 
-            console.log(`[XML STAHOVAČ] Staženo. Naskladňuji prvních 50 položek pro: ${prodejce.jmeno}`);
+            console.log(`[XML STAHOVAČ] Staženo. Naskladňuji položky pro: ${prodejce.jmeno}`);
 
-            // Zpracujeme z každého e-shopu prvních 50 nejlepších věcí, ať máme pestrý sklad
-            const omezenePolozky = polozky.slice(0, 50);
-
-            for (const polozka of omezenePolozky) {
+            for (const polozka of polozky) {
+                // Univerzální vyhledávač malých i VELKÝCH značek v textu
                 const extrahujTag = (text, tag) => {
-                    const startTag = `<${tag}>`; const endTag = `</${tag}>`;
-                    const startPos = text.indexOf(startTag); const endPos = text.indexOf(endTag);
+                    let startTag = `<${tag}>`; let endTag = `</${tag}>`;
+                    let startPos = text.indexOf(startTag); let endPos = text.indexOf(endTag);
+                    if (startPos === -1) {
+                        startTag = `<${tag.toLowerCase()}>`; endTag = `</${tag.toLowerCase()}>`;
+                        startPos = text.indexOf(startTag); endPos = text.indexOf(endTag);
+                    }
+                    if (startPos === -1) {
+                        startTag = `<${tag.toUpperCase()}>`; endTag = `</${tag.toUpperCase()}>`;
+                        startPos = text.indexOf(startTag); endPos = text.indexOf(endTag);
+                    }
                     if (startPos !== -1 && endPos !== -1) return text.substring(startPos + startTag.length, endPos).trim();
                     return "";
                 };
 
-                const item_id = extrahujTag(polozka, 'ITEM_ID');
-                const nazev = extrahujTag(polozka, 'PRODUCTNAME');
-                const cenaText = extrahujTag(polozka, 'PRICE_VAT');
-                const popis = extrahujTag(polozka, 'DESCRIPTION');
-                let obrazek = extrahujTag(polozka, 'IMGURL');
+                const item_id = extrahujTag(polozka, 'item_id');
+                const nazev = extrahujTag(polozka, 'productname') || extrahujTag(polozka, 'product');
+                const cenaText = extrahujTag(polozka, 'price_vat') || extrahujTag(polozka, 'price');
+                const popis = extrahujTag(polozka, 'description');
+                let obrazek = extrahujTag(polozka, 'imgurl');
 
                 if (!item_id || !nazev) continue;
 
                 const cena = parseFloat(cenaText) || 0;
-                const sklad = parseInt(extrahujTag(polozka, 'STOCK')) || 5;
+                const sklad = parseInt(extrahujTag(polozka, 'stock')) || 5;
 
                 if (obrazek) {
                     obrazek = obrazek.replace(/&amp;/g, '&');
@@ -270,12 +272,14 @@ async function synchronizujXmlFeedy() {
 
                 console.log(`[XML STAHOVAČ] [${prodejce.jmeno}] Naskladňuji: "${nazev.substring(0, 22)}...", Cena: ${cena} Kč`);
 
-                // Bezpečně zapíšeme nebo zaktualizujeme produkt v Supabase
+                // Do unifikovaného sloupce item_id přidáme ID obchodu, aby se nám produkty nemíchaly!
+                const unikatni_item_id = `${prodejce.id}-${item_id}`;
+
                 await supabase
                     .from('produkty')
                     .upsert({
                         prodejce_id: prodejce.id,
-                        item_id: item_id,
+                        item_id: unikatni_item_id,
                         nazev: nazev,
                         cena: cena,
                         sklad: sklad,
@@ -285,14 +289,14 @@ async function synchronizujXmlFeedy() {
             }
             console.log(`[XML STAHOVAČ] Synchronizace pro prodejce ${prodejce.jmeno} úspěšně dokončena.`);
         }
-        console.log('[XML STAHOVAČ] Kompletní hromadný import pro všechny e-shopy byl úspěšně hotov!');
+        console.log('[XML STAHOVAČ] Hromadný import úspěšně hotov!');
     } catch (err) {
-        console.error('[XML STAHOVAČ] Kritická globální chyba multihromadného stahovače:', err.message);
+        console.error('[XML STAHOVAČ] Kritická globální chyba:', err.message);
     }
 }
 
-// Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
+
 // ==========================================
 // SAMOTNÝ START SERVERU (Úplný konec souboru)
 // ==========================================

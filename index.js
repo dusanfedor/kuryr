@@ -193,49 +193,59 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
 });
 
 // ==========================================
-// ŽIVÝ STAHOVAČ TESTOVACÍHO HEUREKA SORTIMENTU
+// MULTIOBCHODOVÝ INTERNETOVÝ XML STAHOVAČ SORTIMENTU
 // ==========================================
 async function synchronizujXmlFeedy() {
-    console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
+    console.log('[XML STAHOVAČ] Startuji plnou kontrolu internetových XML feedů pro všechny obchody...');
     
+    const https = require('https');
+    const agent = new https.Agent({ rejectUnauthorized: false });
+
     try {
+        // Stáhneme z databáze seznam všech aktivních prodejců
         const { data: prodejci, error: dbError } = await supabase
             .from('prodejci')
             .select('id, jmeno, xml_url');
 
         if (dbError) throw dbError;
 
+        console.log(`[XML STAHOVAČ] Databáze vrátila prodejců k synchronizaci: ${prodejci ? prodejci.length : 0}`);
+
         for (const prodejce of prodejci) {
-            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed z: ${prodejce.xml_url}`);
+            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed z: ${prodejce.xml_url} (${prodejce.jmeno})`);
             
             let response;
             try {
                 response = await axios.get(prodejce.xml_url, {
-                    timeout: 25000,
+                    httpsAgent: agent,
+                    timeout: 35000, // 35 vteřin limit na stažení jednoho e-shopu
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                     }
                 });
             } catch (fetchError) {
-                console.error(`[XML STAHOVAČ] Nepodařilo se stáhnout feed z internetu:`, fetchError.message);
-                continue;
+                console.error(`[XML STAHOVAČ] Nepodařilo se stáhnout feed pro ${prodejce.jmeno}:`, fetchError.message);
+                continue; // Pokud jeden e-shop selže, kód se nenaštve a skočí na další v pořadí!
             }
             
             let surovaXmlData = response.data;
-            if (!surovaXmlData || typeof surovaXmlData !== 'string') continue;
+            if (!surovaXmlData || typeof surovaXmlData !== 'string') {
+                console.error(`[XML STAHOVAČ] Data pro ${prodejce.jmeno} nejsou textový řetězec.`);
+                continue;
+            }
 
             surovaXmlData = surovaXmlData.replace(/\r/g, "");
 
-            // Rozdělení feedu podle standardního velkého i malého Heureka tagu <SHOPITEM>
+            // Rozdělení feedu podle standardního Heureka tagu <SHOPITEM>
             const polozky = surovaXmlData.split(/<SHOPITEM>/i);
             polozky.shift(); 
 
-            console.log(`[XML STAHOVAČ] Úspěšně staženo z internetu. Zpracovávám ${polozky.length} položek.`);
+            console.log(`[XML STAHOVAČ] Staženo. Naskladňuji prvních 50 položek pro: ${prodejce.jmeno}`);
 
-            // Zpracujeme maximálně prvních 50 položek, ať nezahltíme paměť
-            const omezenyPocet = polozky.slice(0, 50);
+            // Zpracujeme z každého e-shopu prvních 50 nejlepších věcí, ať máme pestrý sklad
+            const omezenePolozky = polozky.slice(0, 50);
 
-            for (const polozka of omezenyPocet) {
+            for (const polozka of omezenePolozky) {
                 const extrahujTag = (text, tag) => {
                     const startTag = `<${tag}>`; const endTag = `</${tag}>`;
                     const startPos = text.indexOf(startTag); const endPos = text.indexOf(endTag);
@@ -258,8 +268,9 @@ async function synchronizujXmlFeedy() {
                     obrazek = obrazek.replace(/&amp;/g, '&');
                 }
 
-                console.log(`[XML STAHOVAČ] Naskladňuji z internetu: "${nazev.substring(0, 25)}...", Cena: ${cena} Kč`);
+                console.log(`[XML STAHOVAČ] [${prodejce.jmeno}] Naskladňuji: "${nazev.substring(0, 22)}...", Cena: ${cena} Kč`);
 
+                // Bezpečně zapíšeme nebo zaktualizujeme produkt v Supabase
                 await supabase
                     .from('produkty')
                     .upsert({
@@ -272,19 +283,16 @@ async function synchronizujXmlFeedy() {
                         obrazek: obrazek     
                     }, { onConflict: 'item_id' });
             }
-            console.log(`[XML STAHOVAČ] Plná synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
+            console.log(`[XML STAHOVAČ] Synchronizace pro prodejce ${prodejce.jmeno} úspěšně dokončena.`);
         }
+        console.log('[XML STAHOVAČ] Kompletní hromadný import pro všechny e-shopy byl úspěšně hotov!');
     } catch (err) {
-        console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
+        console.error('[XML STAHOVAČ] Kritická globální chyba multihromadného stahovače:', err.message);
     }
 }
 
 // Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
-
-
-
-
 // ==========================================
 // SAMOTNÝ START SERVERU (Úplný konec souboru)
 // ==========================================

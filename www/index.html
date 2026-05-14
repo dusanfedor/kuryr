@@ -46,6 +46,8 @@
         .order-section { margin-top: 15px; padding-top: 15px; border-top: 1px dashed #dddddd; }
         .order-input { width: 100%; padding: 12px; border: 1px solid #cccccc; border-radius: 6px; box-sizing: border-box; font-size: 0.9rem; margin-bottom: 10px; }
         .btn-order { width: 100%; padding: 14px; background: #ffc107; color: #111; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+            .footer-credit { font-size: 0.8rem; color: #888888; margin-top: 30px; margin-bottom: 20px; font-weight: 500; text-align: center; width: 100%; letter-spacing: 0.5px; }
+
     </style>
 </head>
 <body>
@@ -69,6 +71,10 @@
         <div id="map"></div>
         <div id="vysledky"></div>
     </div>
+    </div>
+
+    <!-- Patička s podpisem autora -->
+    <div class="footer-credit">Aplikaci vytvořil © Dušan Fedor</div>
 
     <script>
         const cdnProtokol = "https://";
@@ -177,7 +183,7 @@
         }
 
         // Tato funkce po kliknutí na fotku sestaví kompletní detailní kartu e-shopu do vyskakovacího okna
-        function otevriDetail(p, navigaceUrl) {
+               function otevriDetail(p, navigaceUrl) {
             const modal = document.getElementById('detailModal');
             const obsah = document.getElementById('modalDynamickyObsah');
 
@@ -201,11 +207,14 @@
                 <div class="order-section">
                     <input type="text" id="msg-${p.produkt_id}" class="order-input" placeholder="Vzkaz kurýrovi (např: Kasa 1, PIN: 1234)...">
                     <button class="btn-order" onclick="odeslatKuryrum(${p.produkt_id}, '${p.prodejce_id}')">💳 Koupit & volat kurýra</button>
+                    <!-- TADY JE TVŮJ NOVÝ PODPIS UVNITŘ OKNA: -->
+                    <div style="text-align: center; font-size: 0.75rem; color: #aaa; margin-top: 15px; font-weight: 500;">Autor platformy: Dušan Fedor</div>
                 </div>
             `;
 
             modal.classList.add('show');
         }
+
 
         function zavriDetail(e) {
             if (e.target.id === 'detailModal') {

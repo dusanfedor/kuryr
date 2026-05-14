@@ -3,49 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuryr - Vyhledávání a Objednávky</title>
+    <title>Kuryr - Rychlé doručení</title>
     <link rel="icon" href="data:,">
     <link id="map-css" rel="stylesheet" href="data:text/css," />
     <script id="map-js"></script>
     <style>
         :root { --primary: #28a745; --bg: #f8f9fa; --dark: #343a40; }
-        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
         
-        /* Horní lišta rozcestníku pro snadné překlikávání na mobilu */
         .nav-bar { background: var(--dark); width: 100%; padding: 12px 0; text-align: center; display: flex; justify-content: center; gap: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .nav-link { color: rgba(255,255,255,0.7); text-decoration: none; font-weight: bold; font-size: 1rem; transition: 0.2s; }
-        .nav-link.active { color: #28a745; }
+        .nav-link.active { color: var(--primary); }
 
         .container { width: 100%; max-width: 500px; padding: 20px; text-align: center; box-sizing: border-box; }
         .btn-voice { width: 100%; padding: 20px; background: var(--primary); color: white; border: none; border-radius: 15px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         #map { height: 300px; width: 100%; border-radius: 15px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: none; }
-        
-        .prodejce-karta { background: white; border-radius: 15px; padding: 15px; margin-top: 15px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 10px; }
-        .card-main { display: flex; align-items: center; gap: 15px; }
-        .product-img { width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); background: #e9ecef; }
-        
-        .nav-btn { display: inline-block; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: bold; margin-top: 5px; }
-        .order-section { margin-top: 10px; padding-top: 12px; border-top: 1px dashed #ccc; }
-        .order-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 0.9rem; margin-bottom: 8px; }
-        .btn-order { width: 100%; padding: 10px; background: #ffc107; color: var(--dark); border: none; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; }
         #status { height: 25px; margin-top: 20px; color: #666; font-weight: 500; }
-                /* Styly pro modální okno zvětšeného obrázku */
-        .lightbox-modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease; }
-        .lightbox-modal.show { display: flex; opacity: 1; }
-        .lightbox-img { max-width: 90%; max-height: 80%; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.5); transform: scale(0.9); transition: transform 0.3s ease; }
-        .lightbox-modal.show .lightbox-img { transform: scale(1); }
-        .product-img { cursor: pointer; transition: transform 0.2s ease; }
-        .product-img:hover { transform: scale(1.05); }
+        
+        /* Základní karta s jedním náhledovým obrázkem */
+        .prodejce-karta { background: white; border-radius: 15px; padding: 15px; margin-top: 15px; text-align: left; border-left: 6px solid var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 15px; }
+        .product-img-preview { width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.2s ease; }
+        .product-img-preview:hover { transform: scale(1.05); }
 
+        /* GIGANTICKÉ DETAILNÍ OKNO (Zobrazí se po kliknutí na fotku) */
+        .detail-modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 15px; box-sizing: border-box; }
+        .detail-modal.show { display: flex; }
+        .detail-obsah { background: #ffffff; width: 100%; max-width: 440px; border-radius: 16px; padding: 20px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.3); position: relative; }
+        .close-btn { position: absolute; top: 12px; right: 15px; font-size: 1.5rem; font-weight: bold; color: #aaa; cursor: pointer; border: none; background: none; }
+        
+        .modal-image-container { width: 100%; background: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; padding: 10px; box-sizing: border-box; display: flex; justify-content: center; margin-bottom: 15px; }
+        .modal-product-img { max-width: 100%; height: 200px; object-fit: contain; }
+        .modal-title { font-size: 1.3rem; font-weight: 700; color: #111; margin: 0 0 5px 0; line-height: 1.3; }
+        .modal-price { font-size: 1.4rem; font-weight: 800; color: #000; margin: 10px 0; }
+        
+        .vlastnosti-tabulka { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.88rem; text-align: left; }
+        .vlastnosti-tabulka tr { border-bottom: 1px solid #e9ecef; }
+        .vlastnosti-tabulka td { padding: 8px 0; }
+        .vlastnosti-tabulka td.label { color: #777; width: 35%; }
+        .vlastnosti-tabulka td.value { color: #111; font-weight: 600; }
+
+        .nav-btn { display: block; text-align: center; padding: 10px; background: #ffffff; color: #333; text-decoration: none; border-radius: 6px; font-size: 0.9rem; font-weight: 600; border: 1px solid #cccccc; margin-top: 10px; }
+        .order-section { margin-top: 15px; padding-top: 15px; border-top: 1px dashed #dddddd; }
+        .order-input { width: 100%; padding: 12px; border: 1px solid #cccccc; border-radius: 6px; box-sizing: border-box; font-size: 0.9rem; margin-bottom: 10px; }
+        .btn-order { width: 100%; padding: 14px; background: #ffc107; color: #111; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
-        <!-- Skrytá vrstva pro zvětšený obrázek -->
-    <div id="lightbox" class="lightbox-modal" onclick="zavriLightbox()">
-        <img id="lightbox-target" class="lightbox-img" src="" alt="Zvětšený náhled">
+
+    <!-- Samostatné vyskakovací okno pro detail produktu -->
+    <div id="detailModal" class="detail-modal" onclick="zavriDetail(event)">
+        <div class="detail-obsah">
+            <button class="close-btn" onclick="document.getElementById('detailModal').classList.remove('show')">&times;</button>
+            <div id="modalDynamickyObsah"></div>
+        </div>
     </div>
 
-    <!-- Horní navigační lišta pro okamžitý skok do dispečinku -->
     <div class="nav-bar">
         <a href="/" class="nav-link active">🛒 Zákazník (Hledat)</a>
         <a href="/kuryr.html" class="nav-link">🚗 Kurýr (Dispečink)</a>
@@ -74,22 +86,20 @@
             const mapEl = document.getElementById('map');
             mapEl.style.display = 'block';
             if (!map) {
-                map = L.map('map').setView([lat, lng], 13);
+                map = L.map('map').setView([lat, lng], 14);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
             } else {
-                map.setView([lat, lng], 13);
+                map.setView([lat, lng], 14);
             }
             if (mojePoloha) map.removeLayer(mojePoloha);
-            mojePoloha = L.circle([lat, lng], { color: 'blue', fillColor: '#30f', fillOpacity: 0.4, radius: 30 }).addTo(map).bindPopup("Tvoje poloha");
+            mojePoloha = L.circle([lat, lng], { color: 'blue', fillColor: '#30f', fillOpacity: 0.15, radius: 40 }).addTo(map);
         }
 
         async function odeslatKuryrum(produktId, prodejceId) {
             const zpravaInput = document.getElementById(`msg-${produktId}`);
             const zpravaText = zpravaInput ? zpravaInput.value.trim() : "";
 
-            if (!zpravaText) {
-                return alert("Před přivoláním kurýra prosím napište vzkaz!");
-            }
+            if (!zpravaText) return alert("Před přivoláním kurýra prosím napište vzkaz!");
 
             try {
                 const res = await fetch('/api/objednat', {
@@ -100,13 +110,11 @@
 
                 const vysledek = await res.json();
                 if (vysledek.success) {
-                    alert("🎉 Zpráva byla odeslána kurýrům! Přepněte se do lišty Kurýr.");
-                    if (zpravaInput) zpravaInput.value = "";
-                } else {
-                    alert("Chyba odeslání.");
+                    alert("🎉 Objednávka odeslána kurýrům!");
+                    document.getElementById('detailModal').classList.remove('show');
                 }
             } catch (err) {
-                alert("Selhalo spojení.");
+                alert("Selhalo odeslání.");
             }
         }
 
@@ -114,7 +122,7 @@
             const status = document.getElementById('status');
             const seznam = document.getElementById('vysledky');
             const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!Speech) return alert("Zkus Chrome.");
+            if (!Speech) return alert("Použijte Chrome.");
             
             const recognition = new Speech();
             recognition.lang = 'cs-CZ';
@@ -122,11 +130,7 @@
             recognition.start();
 
             recognition.onresult = async (event) => {
-                let hlasovyText = "";
-                if (event.results && event.results[0] && event.results[0][0]) {
-                    hlasovyText = event.results[0][0].transcript;
-                }
-                
+                let hlasovyText = event.results[0][0].transcript;
                 let textCisty = hlasovyText.replace(/[.]/g, "").trim().toLowerCase();
                 status.innerText = `Hledám: "${textCisty}"`;
 
@@ -142,54 +146,18 @@
 
                     if (data && data.length > 0) {
                         data.forEach(p => {
-                            const navigaceUrl = "google.com" + p.lat + "," + p.lng;
+                            const navigaceUrl = `google.com{p.lat},${p.lng}`;
 
-                            let objednavkaHtml = "";
-                            if (p.produkt_id && p.produkt_id !== 999 && p.produkt_id !== 0) {
-                                objednavkaHtml = `
-                                    <div class="order-section">
-                                        <input type="text" id="msg-${p.produkt_id}" class="order-input" placeholder="Vzkaz kurýrovi (např: Kasa 2, PIN: 1234)...">
-                                        <button class="btn-order" onclick="odeslatKuryrum(${p.produkt_id}, '${p.prodejce_id}')">💳 Koupit & volat kurýra</button>
-                                    </div>`;
-                            }
-
-                            // Neprůstřelná pojistka: pokud adresa obsahuje Unsplash (který blokuje mobily), podstrčíme bezpečný obrázek tenisky z CDN
-                                                       // Načteme čistou adresu ze Supabase tabulky produkty
-                                                       // Načteme surovou adresu z databáze
-                                                        // Načteme surovou adresu z databáze
-                                                        // Načteme surovou adresu z databáze Supabase
-                                                       // NEPRŮSTŘELNÉ: Bere čistou a dlouhou adresu obrázku přímo z nového živého XML feedu
-                            let surovaAdresa = p.obrazek_url || '';
-                            let fotoAdresa = '';
-
-                            if (surovaAdresa.startsWith('http://') || surovaAdresa.startsWith('https://')) {
-                                fotoAdresa = surovaAdresa;
-                            } else if (surovaAdresa.trim() !== '') {
-                                fotoAdresa = 'https://' + surovaAdresa;
-                            } else {
-                                // Záložní čtverec, pokud by u nějakého produktu fotka chyběla
-                                fotoAdresa = 'data:image/svg+xml;utf8,<svg xmlns="w3.org" width="85" height="85" viewBox="0 0 85 85"><rect width="85" height="85" fill="%23e9ecef"/><text x="50%" y="55%" font-family="sans-serif" font-size="24" text-anchor="middle">🖼️</text></svg>';
-                            }
-
-
-
+                            // Do okna vyhledávače vygenerujeme POUZE čistou řádku s jednou vybranou fotkou produktu
                             seznam.innerHTML += `
                                 <div class="prodejce-karta">
-                                    <div class="card-main">
-                                        <img src="${fotoAdresa}" class="product-img" style="width: 85px; height: 85px; min-width: 85px; object-fit: cover; border-radius: 12px;" alt="Zboží">
-                                        <div style="flex-grow: 1;">
-                                            <strong>📍 ${p.prodejce_jmeno || 'Obchod'}</strong><br>
-                                            📦 ${p.nazev_produktu || 'Zboží'}<br>
-                                            💰 <strong>Cena: ${p.cena || 0} Kč</strong><br>
-                                            📞 <a href="tel:${p.telefon}">${p.telefon || 'neuveden'}</a>
-                                        </div>
+                                    <img src="${p.obrazek_url}" class="product-img-preview" alt="Zboží" onclick="otevriDetail(${JSON.stringify(p).replace(/"/g, '&quot;')}, '${navigaceUrl}')">
+                                    <div style="flex-grow: 1; text-align: left;">
+                                        <strong>📍 ${p.prodejce_jmeno}</strong><br>
+                                        📦 ${p.nazev_produktu}<br>
+                                        💰 <strong>Cena: ${p.cena} Kč</strong>
                                     </div>
-                                    <div>
-                                        <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Navigovat</a>
-                                    </div>
-                                    ${objednavkaHtml}
                                 </div>`;
-
 
                             if (p.lat && p.lng) {
                                 const m = L.marker([p.lat, p.lng]).addTo(map).bindPopup(`<b>${p.prodejce_jmeno}</b>`);
@@ -203,22 +171,47 @@
                         seznam.innerText = "Nic nenalezeno.";
                     }
                 } catch (e) {
-                    status.innerText = "Chyba při vyhledávání.";
+                    status.innerText = "Chyba vyhledávání.";
                 }
             };
         }
-                function otevriLightbox(src) {
-            const modal = document.getElementById('lightbox');
-            const img = document.getElementById('lightbox-target');
-            img.src = src;
+
+        // Tato funkce po kliknutí na fotku sestaví kompletní detailní kartu e-shopu do vyskakovacího okna
+        function otevriDetail(p, navigaceUrl) {
+            const modal = document.getElementById('detailModal');
+            const obsah = document.getElementById('modalDynamickyObsah');
+
+            obsah.innerHTML = `
+                <div class="modal-image-container">
+                    <img src="${p.obrazek_url}" class="modal-product-img" alt="Produkt">
+                </div>
+                <h2 class="modal-title">${p.nazev_produktu}</h2>
+                <div class="modal-price">${p.cena} Kč</div>
+
+                <table class="vlastnosti-tabulka">
+                    <tr><td class="label">Obchod</td><td class="value">📍 ${p.prodejce_jmeno}</td></tr>
+                    <tr><td class="label">Dostupnost</td><td class="value" style="color: #28a745;">Skladem (${p.sklad} ks)</td></tr>
+                    <tr><td class="label">Materiál</td><td class="value">Zimní kolekce Catherine Life</td></tr>
+                    <tr><td class="label">Popis</td><td class="value" style="font-weight: 400; color: #555;">${p.popis || 'Detailní vlastnosti produktu.'}</td></tr>
+                    <tr><td class="label">Telefon</td><td class="value"><a href="tel:${p.telefon}" style="color: inherit; text-decoration: none;">${p.telefon}</a></td></tr>
+                </table>
+
+                <a href="${navigaceUrl}" target="_blank" rel="noopener" class="nav-btn">🚗 Trasa na prodejnu</a>
+
+                <div class="order-section">
+                    <input type="text" id="msg-${p.produkt_id}" class="order-input" placeholder="Vzkaz kurýrovi (např: Kasa 1, PIN: 1234)...">
+                    <button class="btn-order" onclick="odeslatKuryrum(${p.produkt_id}, '${p.prodejce_id}')">💳 Koupit & volat kurýra</button>
+                </div>
+            `;
+
             modal.classList.add('show');
         }
 
-        function zavriLightbox() {
-            const modal = document.getElementById('lightbox');
-            modal.classList.remove('show');
+        function zavriDetail(e) {
+            if (e.target.id === 'detailModal') {
+                document.getElementById('detailModal').classList.remove('show');
+            }
         }
-
     </script>
 </body>
 </html>

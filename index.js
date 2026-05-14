@@ -198,86 +198,95 @@ app.post('/api/kuryr/doruceno', async (req, res) => {
  // ==========================================
 // AUTOMATICKÝ STABILNÍ PLNIČ PRODUKTŮ CATHERINE LIFE / RELAX / R2
 // ==========================================
+// ==========================================
+// FINÁLNÍ ŽIVÝ INTERNETOVÝ XML STAHOVAČ SORTIMENTU
+// ==========================================
 async function synchronizujXmlFeedy() {
-    console.log('[XML STAHOVAČ] Startuji kontrolu internetových XML feedů...');
+    console.log('[XML STAHOVAČ] Startuji plnou kontrolu internetových XML feedů...');
     
+    const https = require('https');
+    const agent = new https.Agent({ rejectUnauthorized: false });
+
     try {
-        // Načteme prodejce z databáze
         const { data: prodejci, error: dbError } = await supabase
             .from('prodejci')
             .select('id, jmeno, xml_url');
 
-        if (dbError) {
-            console.error('[XML STAHOVAČ] Chyba Supabase při načítání prodejců:', dbError.message);
-            return;
-        }
-
-        console.log(`[XML STAHOVAČ] Supabase úspěšně vrátil prodejců: ${prodejci ? prodejci.length : 0}`);
+        if (dbError) throw dbError;
 
         for (const prodejce of prodejci) {
-            console.log(`[XML STAHOVAČ] Aktivuji kompletní naskladňovací balík Catherine Life pro: ${prodejce.jmeno}`);
+            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji ostrý feed: ${prodejce.jmeno}`);
             
-            // Definitivní pole reálných sportovních věcí s funkčními CDN obrázky
-            const produktyKeZpracovani = [
-                {
-                    item_id: 'r2-bryle-01',
-                    nazev: 'Sportovní sluneční brýle R2 Evolution',
-                    cena: 1290,
-                    popis: 'Špičkové cyklistické a běžecké brýle R2 s výměnnými polykarbonátovými skly. Protiskluzové nosníky a straničky. Skladem v Holešovicích.',
-                    obrazek: 'picsum.photos/200'
-                },
-                {
-                    item_id: 'relax-bryle-02',
-                    nazev: 'Módní sluneční brýle Relax Keri',
-                    cena: 590,
-                    popis: 'Elegantní dámské sluneční brýle Relax s polarizačními skly a 100% UV ochranou. Odolný polykarbonátový rám.',
-                    obrazek: 'picsum.photos/200'
-                },
-                {
-                    item_id: 'r2-helma-03',
-                    nazev: 'Cyklistická helma R2 Trail Pro',
-                    cena: 1890,
-                    popis: 'Bezpečná a skvěle odvětraná MTB přilba R2 s prodlouženým zátylkem a upínacím systémem Ergo Fix. Včetně štítku proti slunci.',
-                    obrazek: 'picsum.photos/200'
-                },
-                {
-                    item_id: 'relax-rukavice-04',
-                    nazev: 'Zimní lyžařské rukavice Relax Cross',
-                    cena: 790,
-                    popis: 'Teplé funkční lyžařské rukavice s membránou Aqua Protect. Protiskluzová úprava dlaně, stahování zápěstí na suchý zip.',
-                    obrazek: 'picsum.photos/200'
-                },
-                {
-                    item_id: 'cl-cepice-05',
-                    nazev: 'Dámská zimní pletená čepice Catherine',
-                    cena: 390,
-                    popis: 'Teplá pletená čepice z příjemného materiálu s velkou bambulí. Ideální doplněk pro chladné zimní dny v Holešovicích.',
-                    obrazek: 'picsum.photos/200'
+            let response;
+            try {
+                response = await axios.get(prodejce.xml_url, {
+                    httpsAgent: agent,
+                    timeout: 30000, // 30 vteřin limit na stažení celého e-shopu
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    }
+                });
+            } catch (fetchError) {
+                console.error(`[XML STAHOVAČ] Nepodařilo se stáhnout soubor z internetu:`, fetchError.message);
+                continue;
+            }
+            
+            let surovaXmlData = response.data;
+            if (!surovaXmlData || typeof surovaXmlData !== 'string') {
+                console.error('[XML STAHOVAČ] Stažená data nejsou textový řetězec.');
+                continue;
+            }
+
+            surovaXmlData = surovaXmlData.replace(/\r/g, "");
+
+            // Rozdělení feedu podle standardního Heureka tagu <SHOPITEM>
+            const polozky = surovaXmlData.split(/<SHOPITEM>/i);
+            polozky.shift(); 
+
+            console.log(`[XML STAHOVAČ] Úspěšně staženo. Zahajuji naskladňování ${polozky.length} položek do Supabase.`);
+
+            for (const polozka of polozky) {
+                const extrahujTag = (text, tag) => {
+                    const startTag = `<${tag}>`;
+                    const endTag = `</${tag}>`;
+                    const startPos = text.indexOf(startTag);
+                    const endPos = text.indexOf(endTag);
+                    if (startPos !== -1 && endPos !== -1) {
+                        return text.substring(startPos + startTag.length, endPos).trim();
+                    }
+                    return "";
+                };
+
+                const item_id = extrahujTag(polozka, 'ITEM_ID');
+                const nazev = extrahujTag(polozka, 'PRODUCTNAME');
+                const cenaText = extrahujTag(polozka, 'PRICE_VAT');
+                const popis = extrahujTag(polozka, 'DESCRIPTION');
+                let obrazek = extrahujTag(polozka, 'IMGURL');
+
+                if (!item_id || !nazev) continue;
+
+                const cena = parseFloat(cenaText) || 0;
+                const sklad = parseInt(extrahujTag(polozka, 'STOCK')) || 5;
+
+                if (obrazek) {
+                    obrazek = obrazek.replace(/&amp;/g, '&');
                 }
-            ];
 
-            console.log(`[XML STAHOVAČ] Zahajuji naskladňování ${produktyKeZpracovani.length} položek do Supabase...`);
+                console.log(`[XML STAHOVAČ] Naskladňuji z internetu: "${nazev.substring(0, 25)}...", Cena: ${cena} Kč`);
 
-            for (const p of produktyKeZpracovani) {
-                console.log(`[XML STAHOVAČ] Zapisuji: "${p.nazev.substring(0, 25)}...", Cena: ${p.cena} Kč`);
-
-                const { error: upsertError } = await supabase
+                await supabase
                     .from('produkty')
                     .upsert({
                         prodejce_id: prodejce.id,
-                        item_id: p.item_id,
-                        nazev: p.nazev,
-                        cena: p.cena,
-                        sklad: 5,
-                        popis: p.popis,       
-                        obrazek: p.obrazek     
+                        item_id: item_id,
+                        nazev: nazev,
+                        cena: cena,
+                        sklad: sklad,
+                        popis: popis,       
+                        obrazek: obrazek     
                     }, { onConflict: 'item_id' });
-
-                if (upsertError) {
-                    console.error(`[XML STAHOVAČ] Chyba zápisu produktu do Supabase:`, upsertError.message);
-                }
             }
-            console.log(`[XML STAHOVAČ] Lokální synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
+            console.log(`[XML STAHOVAČ] Plná synchronizace pro ${prodejce.jmeno} úspěšně dokončena.`);
         }
     } catch (err) {
         console.error('[XML STAHOVAČ] Kritická chyba stahovače:', err.message);
@@ -286,6 +295,7 @@ async function synchronizujXmlFeedy() {
 
 // Spustíme stahování automaticky 10 vteřin po startu serveru
 setTimeout(synchronizujXmlFeedy, 10000);
+
 
 // ==========================================
 // SAMOTNÝ START SERVERU (Úplný konec souboru)

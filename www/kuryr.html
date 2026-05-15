@@ -68,15 +68,14 @@
                     const tridaKarty = z.stav === 'v_reseni' ? 'zakazka-karta v_reseni' : 'zakazka-karta nova';
                     const titulek = z.stav === 'v_reseni' ? '🔒 Moje aktivní přeprava' : '🛒 Volná zakázka (Klikni a vydělej)';
 
-                    // BEZPEČNÝ MAPOVÝ OBJEKT PRO ORANŽOVÉ TLAČÍTKO NA KARTĚ
-                    const mapaKartaObjekt = new URL("https://google.com");
-                    mapaKartaObjekt.searchParams.append("api", "1");
-                    mapaKartaObjekt.searchParams.append("origin", z.adresa_vyzvednuti || 'Sklad Praha');
-                    mapaKartaObjekt.searchParams.append("destination", z.adresa_doruceni || 'Praha');
-                    mapaKartaObjekt.searchParams.append("travelmode", "driving");
-                    const mapovaNavigaceUrl = mapaKartaObjekt.toString();
+                    // MATEMATICKY NEPRŮSTŘELNÉ RUČNÍ SPOJENÍ URL BEZ CHYBY V PARAMETRECH
+                    const odkazZáklad = "https://google.com";
+                    const odkazStart = "&origin=" + encodeURIComponent(z.adresa_vyzvednuti || 'Sklad Praha');
+                    const odkazCíl = "&destination=" + encodeURIComponent(z.adresa_doruceni || 'Praha');
+                    const odkazAuto = "&travelmode=driving";
 
-                    // Tlačítko akce podle stavu zakázky
+                    const mapovaNavigaceUrl = odkazZáklad + odkazStart + odkazCíl + odkazAuto;
+
                     let tlacitkoSpodniHtml = "";
                     if (z.stav === 'nova') {
                         tlacitkoSpodniHtml = '<button class="btn-akce btn-prijmout" onclick="prijmoutZakazku(' + z.id + ')">⚡ Přijmout zakázku a jet!</button>';
@@ -117,7 +116,6 @@
                                     </div>
                                 </div>
                                 
-                                <!-- ORANŽOVÉ TLAČÍTKO JE VYKRESLENO ZDE - NATVRDO PRO KAŽDOU KARTU ZAKÁZKY -->
                                 <a class="btn-akce btn-navigace" href="${mapovaNavigaceUrl}" target="_blank">🗺️ SPUSTIT GPS NAVIGACI (A ➔ B)</a>
                                 
                                 ${tlacitkoSpodniHtml}
@@ -143,7 +141,22 @@
                 });
                 
                 if (res.ok) {
-                    alert("🚀 Zakázka uzamčena pro váš vůz!");
+                    const resAktualni = await fetch('/api/kuryr/objednavky?kuryr_id=' + MY_KURYR_ID);
+                    const zakazky = await resAktualni.json();
+                    const mojeZakazka = zakazky.find(z => Number(z.id) === Number(id));
+
+                    if (mojeZakazka) {
+                        // RUČNÍ SPOJENÍ PRO AUTOMATICKÉ OKNO BEZ CHYBY
+                        const aZáklad = "https://google.com";
+                        const aStart = "&origin=" + encodeURIComponent(mojeZakazka.adresa_vyzvednuti);
+                        const aCíl = "&destination=" + encodeURIComponent(mojeZakazka.adresa_doruceni);
+                        const aAuto = "&travelmode=driving";
+
+                        const autoNavUrl = aZáklad + aStart + aCíl + aAuto;
+                        
+                        alert("🚀 Zakázka uzamčena pro váš vůz!");
+                        window.open(autoNavUrl, '_blank');
+                    }
                     nactiZakazky();
                 } else {
                     const data = await res.json();

@@ -1,306 +1,208 @@
 const express = require('express');
-const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
-const axios = require('axios');
-const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
 const app = express();
 
-// 1. Nastavení Supabase
-const supabaseUrl = 'https://egqytbxxhcmafzqkiogd.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVncXl0Ynh4aGNtYWZ6cWtpb2dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzM0MzEsImV4cCI6MjA5MzgwOTQzMX0.rmUculPKT_xsYf1uFY8ubq3x5mSF_nahMEQwL9uHcsY';
-const supabase = createClient(supabaseUrl, supabaseKey);
+app.use(express.json());
 
-// ==========================================
-// RADIKÁLNÍ LIQUIDACE CACHE: VYHLEDÁVAČ MÁ ABSOLUTNÍ PRIORITU
-// ==========================================
-// Vrátíme vyhledávač zpět pod bezpečný název index.html
-app.get('/', (req, res) => {
+// Striktní zákaz cachování dat pro hladký real-time provoz na internetu
+app.use((req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.sendFile(path.join(__dirname, 'www', 'index.html'));
+    next();
 });
 
-app.get('/index.html', (req, res) => {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.sendFile(path.join(__dirname, 'www', 'index.html'));
+// ==========================================
+// INICIALIZACE SUPABASE KLIENTA
+// ==========================================
+const SUPABASE_URL = 'https://egqytbxxhcmafzqkiogd.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVncXl0Ynh4aGNtYWZ6cWtpb2dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzM0MzEsImV4cCI6MjA5MzgwOTQzMX0.rmUculPKT_xsYf1uFY8ubq3x5mSF_nahMEQwL9uHcsY'; 
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ==========================================
+// POMOCNÉ FUNKCE PRO TEXTOVOU ANALÝZU
+// ==========================================
+function ziskejKorenSlova(text) {
+    if (!text) return '';
+    let t = String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    t = t.replace(/(ni|ne|ny|na|no|neho|nemu|nem|nim|nych|nym|nymi)\b/g, 'n');
+    t = t.replace(/(ke|ka|ky|ko|ku|keho|kemu|kem|kych|kym|kymi)\b/g, '');
+    t = t.replace(/(ove|ova|ovo|ovy)\b/g, '');
+    return t;
+}
+
+function vycistiText(text) {
+    if (!text) return '';
+    return text
+        .replace(/<!\[CDATA\[/gi, '')
+        .replace(/\]\]>/gi, '')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<\/?[^>]+(>|$)/g, "")
+        .trim();
+}
+
+// ==========================================
+// 1. API: INTELIGENTNÍ HLASOVÉ VYHLEDÁVÁNÍ
+// ==========================================
+app.get('/api/hledej', async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    try {
+        const surovnyVyraz = req.query.zbozi ? String(req.query.zbozi).trim() : '';
+        const vyraz = decodeURIComponent(surovnyVyraz); // Fix pro Linux servery na Renderu
+        const hledaneKoreny = vyraz.split(/\s+/).map(ziskejKorenSlova).filter(s => s.length > 0);
+
+        const { data: produkty, error: queryError } = await supabase.from('produkty').select('*');
+        if (queryError) throw queryError;
+        if (!produkty || produkty.length === 0) return res.json([]);
+
+        let filtrovano = produkty;
+        if (vyraz && hledaneKoreny.length > 0) {
+            filtrovano = produkty.filter(item => {
+                const agregovanyText = String([
+                    item.id_zbozi, item.nazev_modelu, item.znacka, item.nazev_zbozi,
+                    item.popis_cz, item.kategorie, item.pohlavi, item.pohlavi1, item.barva
+                ].filter(Boolean).join(' ')).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                return hledaneKoreny.every(koren => agregovanyText.includes(koren));
+            });
+        }
+
+        const vystup = filtrovano.slice(0, 40).map(item => {
+            const galerie = [item.hlavni_obrazek, item.obr, item.obr1].filter(url => url && url.trim().length > 0);
+            
+            if (galerie.length === 0) {
+                galerie.push('https://r2.cz');
+            }
+            return {
+                id_zbozi: item.id_zbozi,
+                nazev_zbozi: item.nazev_zbozi || item.nazev_modelu || 'Bez názvu',
+                katalogova_cena: item.katalogova_cena || 0,
+                hlavni_obrazek: String(galerie[0]),
+                galerie: galerie,                    
+                popis_zbozi: vycistiText(item.popis_cz || item.popis_CZ || 'Popis není k dispozici.')
+            };
+        });
+        return res.json(vystup);
+    } catch (error) {
+        console.error(' Chybová zpráva API hledání:', error.message);
+        return res.status(500).json([]);
+    }
 });
 
+// ==========================================
+// 2. API: ZÁPIS OBJEDNÁVKY DO DATABÁZE
+// ==========================================
+app.post('/api/objednat', async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    const { id, adresa, telefon } = req.body; 
+    
+    if (!id || !adresa || adresa.trim() === "") {
+        return res.status(400).json({ chyba: 'Chybí ID zboží nebo adresa doručení.' });
+    }
+    
+    try {
+        const adresaSkladu = "Sklad Catherine Life, U Prioru 1076/5, Praha 6";
+        const telefonSkladu = "+420 222 333 444"; 
+        const overenyTelefonZakaznika = telefon && telefon.trim() !== "" ? String(telefon).trim() : "Neuveden";
 
-// Statické soubory jsou až POD ROZCESTNÍKEM
+        const { data: produkt } = await supabase.from('produkty').select('katalogova_cena').eq('id_zbozi', id).single();
+        const cenaZbozi = produkt ? Number(produkt.katalogova_cena) : 0;
+        const cenaKurayra = Math.round(90 + (cenaZbozi * 0.05));
+
+        const { error } = await supabase.from('objednavky').insert([{ 
+            id_zbozi: String(id), 
+            adresa: String(adresa).trim(),                     
+            adresa_vyzvednuti: adresaSkladu,
+            telefon_doruceni: overenyTelefonZakaznika,
+            telefon_vyzvednuti: telefonSkladu,
+            cena_dopravy: cenaKurayra,
+            stav: 'nova'
+        }]);
+        
+        if (error) throw error;
+        return res.json({ stav: 'success', cena_dopravy: cenaKurayra });
+    } catch (error) {
+        console.error(' Chyba zápisu objednávky:', error.message);
+        return res.status(500).json({ chyba: 'Dispečink selhal.' });
+    }
+});
+
+// ==========================================
+// 3. API: DISPEČINK PRO PŘEHLED KURÝRA
+// ==========================================
+app.get('/api/kuryr/objednavky', async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    const kuryrId = req.query.kuryr_id || '';
+    try {
+        const { data: objednavky, error: errObjednavky } = await supabase.from('objednavky').select('*').not('stav', 'eq', 'doruceno');
+        if (errObjednavky) throw errObjednavky;
+        if (!objednavky || objednavky.length === 0) return res.json([]);
+
+        const filtrovane = objednavky.filter(o => o.stav === 'nova' || o.kuryr_id === kuryrId);
+
+        const vystup = filtrovane.map(o => ({
+            id: o.id,
+            id_zbozi: o.id_zbozi,
+            adresa_vyzvednuti: o.adresa_vyzvednuti || 'Sklad Catherine Life, U Prioru 1076/5, Praha 6',
+            telefon_vyzvednuti: o.telefon_vyzvednuti || '+420 222 333 444',
+            adresa_doruceni: o.adresa,
+            telefon_doruceni: o.telefon_doruceni,
+            cena_dopravy: o.cena_dopravy || 90,
+            stav: o.stav,
+            kuryr_id: o.kuryr_id,
+            vytvoreno_at: o.vytvoreno_at
+        }));
+
+        vystup.sort((a, b) => new Date(b.vytvoreno_at) - new Date(a.vytvoreno_at));
+        return res.json(vystup);
+    } catch (error) {
+        console.error(' Chyba v přehledu kurýra:', error.message);
+        return res.json([]);
+    }
+});
+
+app.post('/api/kuryr/prijmout', async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    const { zakazka_id, kuryr_id } = req.body;
+    try {
+        const { data: overeni } = await supabase.from('objednavky').select('stav').eq('id', zakazka_id).single();
+        if (!overeni || overeni.stav !== 'nova') {
+            return res.status(410).json({ chyba: 'Smůla! Tuhle zakázku už vyfoukl jiný kurýr!' });
+        }
+        const { error = null } = await supabase.from('objednavky').update({ stav: 'v_reseni', kuryr_id: String(kuryr_id) }).eq('id', zakazka_id);
+        if (error) throw error;
+        return res.json({ stav: 'success' });
+    } catch (error) {
+        return res.status(500).json({ chyba: 'Nelze zpracovat převzetí.' });
+    }
+});
+
+app.post('/api/kuryr/doruceno', async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    const { zakazka_id } = req.body;
+    try {
+        const { error } = await supabase.from('objednavky').update({ stav: 'doruceno' }).eq('id', zakazka_id);
+        if (error) throw error;
+        return res.json({ stav: 'success' });
+    } catch (error) {
+        return res.status(500).json({ chyba: 'Nelze potvrdit doručení.' });
+    }
+});
+
+// ==========================================
+// GLOBÁLNÍ OBSLUHA STATICKÝCH SOUBORŮ
+// ==========================================
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 app.use(express.static(path.join(__dirname, 'www'), {
-    setHeaders: (res, path) => {
+    setHeaders: (res) => {
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 }));
-app.use(express.json());
 
-// Oprava favicon chyby (vrátí 'No Content')
-app.get('/favicon.ico', (req, res) => res.status(204).end());
-
-
-
-// 1. Čistá doména bez parametrů natvrdo otevře zákaznický vyhledávač
-app.get('/', (req, res) => {
+app.get(/^((?!\/api\/).)*$/, (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.sendFile(path.join(__dirname, 'www', 'index.html'));
 });
 
-// 2. API pro hledání produktů i s polohou prodejce
-app.get('/api/hledej', async (req, res) => {
-    let { zbozi } = req.query;
-    
-    if (zbozi) {
-        // Odstraní uvozovky, tečky, čárky a převede na malá písmena
-        zbozi = zbozi.replace(/["'„“.]/g, "").trim().toLowerCase();
-    } else {
-        zbozi = "";
-    }
-
-    console.log(`[RENDER LOG] Vyčištěný výraz posílaný do Supabase: >>>${zbozi}<<<`);
-
-    try {
-        const { data, error } = await supabase.rpc('hledej_produkty_s_polohou', { 
-            search_term: zbozi 
-        });
-
-        if (error) {
-            console.error('[RENDER LOG] CHYBA ZE SUPABASE:', error.message);
-            return res.status(500).json({ error: error.message });
-        }
-
-        console.log(`[RENDER LOG] Databáze vrátila řádků:`, data ? data.length : 0);
-        res.json(data);
-    } catch (err) {
-        console.error('[RENDER LOG] KRITICKÁ CHYBA:', err);
-        res.status(500).json({ error: 'Server spadl' });
-    }
-});
-
-// 3. API pro registraci nového prodejce
-app.post('/api/registrovat', async (req, res) => {
-    const { jmeno, nabidka, lat, lng, telefon } = req.body;
-    
-    try {
-        const { data, error } = await supabase
-            .from('prodejci')
-            .insert([{ jmeno, nabidka, telephone: telefon, poloha: `POINT(${lng} ${lat})` }]);
-        
-        if (error) return res.status(500).json(error);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: 'Chyba registrace' });
-    }
-});
-
-// 4. API pro odeslání objednávky a zprávy kurýrům
-app.post('/api/objednat', async (req, res) => {
-    const { produkt_id, prodejce_id, zprava } = req.body;
-
-    console.log(`[LOG OBJEDNÁVKA] Nový nákup! Produkt ID: ${produkt_id}, Zpráva: "${zprava}"`);
-
-    try {
-        const { data, error } = await supabase
-            .from('objednavky')
-            .insert([
-                { 
-                    produkt_id: produkt_id, 
-                    prodejce_id: prodejce_id, 
-                    zprava_pro_kuryra: zprava 
-                }
-            ])
-            .select();
-
-        if (error) {
-            console.error('[LOG OBJEDNÁVKA] Chyba zápisu:', error.message);
-            return res.status(500).json({ error: error.message });
-        }
-
-        console.log('[LOG OBJEDNÁVKA] Zpráva pro kurýry úspěšně uložena.');
-        res.json({ success: true, objednavka: data[0] });
-    } catch (err) {
-        console.error('[LOG OBJEDNÁVKA] Kritická chyba:', err);
-        res.status(500).json({ error: 'Selhalo odeslání kurýrům' });
-    }
-});
-
-// ==========================================
-// TRASY PRO KURÝRY
-// ==========================================
-
-// A) Datová trasa - načítá zakázky ze Supabase
-app.get('/api/kuryr/objednavky', async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from('objednavky')
-            .select(`
-                id,
-                stav,
-                zprava_pro_kuryra,
-                vytvoreno_at,
-                produkty ( nazev, cena ),
-                prodejci ( jmeno, telefon, poloha )
-            `)
-            .eq('stav', 'Čeká na vyzvednutí');
-
-        if (error) throw error;
-        
-        const vycistenaData = data.map(o => {
-            return {
-                id: o.id,
-                stav: o.stav,
-                zprava: o.zprava_pro_kuryra,
-                cas: o.vytvoreno_at,
-                produkt_nazev: o.produkty ? o.produkty.nazev : 'Neznámé zboží',
-                produkt_cena: o.produkty ? o.produkty.cena : 0,
-                prodejce_jmeno: o.prodejci ? o.prodejci.jmeno : 'Neznámý obchod',
-                prodejce_telefon: o.prodejci ? o.prodejci.telefon : '',
-                lat: 50.1015,
-                lng: 14.4455
-            };
-        });
-        res.json(vycistenaData);
-    } catch (err) {
-        console.error('[KURYR API] Kritická chyba:', err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// B) Zobrazovací trasa - opravuje nefunkční Cannot GET na mobilu
-app.get('/kuryr.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'www', 'kuryr.html'));
-});
-
-// C) Trasa pro označení objednávky jako doručené (změní stav v Supabase)
-app.post('/api/kuryr/doruceno', async (req, res) => {
-    const { objednavka_id } = req.body;
-    console.log(`[KURYR API] Zakázka ID: ${objednavka_id} byla doručena.`);
-
-    try {
-        const { data, error } = await supabase
-            .from('objednavky')
-            .update({ stav: 'Doručeno' })
-            .eq('id', objednavka_id)
-            .select();
-
-        if (error) {
-            console.error('[KURYR API] Chyba změny stavu:', error.message);
-            return res.status(500).json({ error: error.message });
-        }
-
-        res.json({ success: true });
-    } catch (err) {
-        console.error('[KURYR API] Kritická chyba při doručení:', err);
-        res.status(500).json({ error: 'Selhal zápis doručení' });
-    }
-});
-
-// ==========================================
-// MULTIOBCHODOVÝ INTERNETOVÝ XML STAHOVAČ SORTIMENTU
-// ==========================================
-async function synchronizujXmlFeedy() {
-    console.log('[XML STAHOVAČ] Startuji plnou kontrolu internetových XML feedů pro všechny obchody...');
-    
-    const https = require('https');
-    const agent = new https.Agent({ rejectUnauthorized: false });
-
-    try {
-        const { data: prodejci, error: dbError } = await supabase
-            .from('prodejci')
-            .select('id, jmeno, xml_url');
-
-        if (dbError) throw dbError;
-
-        console.log(`[XML STAHOVAČ] Databáze vrátila prodejců k synchronizaci: ${prodejci ? prodejci.length : 0}`);
-
-        for (const prodejce of prodejci) {
-            console.log(`[XML STAHOVAČ] Připojuji se k internetu a stahuji feed z: ${prodejce.xml_url} (${prodejce.jmeno})`);
-            
-            let response;
-            try {
-                response = await axios.get(prodejce.xml_url, {
-                    httpsAgent: agent,
-                    timeout: 30000,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                    }
-                });
-            } catch (fetchError) {
-                console.error(`[XML STAHOVAČ] Nepodařilo se stáhnout feed pro ${prodejce.jmeno}:`, fetchError.message);
-                continue;
-            }
-            
-            let surovaXmlData = response.data;
-            if (!surovaXmlData || typeof surovaXmlData !== 'string') continue;
-
-            surovaXmlData = surovaXmlData.replace(/\r/g, "");
-
-            // Rozdělení feedu bez ohledu na velikost písmen (SHOPITEM / shopitem)
-            const polozky = surovaXmlData.split(/<SHOPITEM>/i);
-            polozky.shift(); 
-
-            console.log(`[XML STAHOVAČ] Staženo. Naskladňuji položky pro: ${prodejce.jmeno}`);
-
-            for (const polozka of polozky) {
-                // Univerzální vyhledávač malých i VELKÝCH značek v textu
-                const extrahujTag = (text, tag) => {
-                    let startTag = `<${tag}>`; let endTag = `</${tag}>`;
-                    let startPos = text.indexOf(startTag); let endPos = text.indexOf(endTag);
-                    if (startPos === -1) {
-                        startTag = `<${tag.toLowerCase()}>`; endTag = `</${tag.toLowerCase()}>`;
-                        startPos = text.indexOf(startTag); endPos = text.indexOf(endTag);
-                    }
-                    if (startPos === -1) {
-                        startTag = `<${tag.toUpperCase()}>`; endTag = `</${tag.toUpperCase()}>`;
-                        startPos = text.indexOf(startTag); endPos = text.indexOf(endTag);
-                    }
-                    if (startPos !== -1 && endPos !== -1) return text.substring(startPos + startTag.length, endPos).trim();
-                    return "";
-                };
-
-                const item_id = extrahujTag(polozka, 'item_id');
-                const nazev = extrahujTag(polozka, 'productname') || extrahujTag(polozka, 'product');
-                const cenaText = extrahujTag(polozka, 'price_vat') || extrahujTag(polozka, 'price');
-                const popis = extrahujTag(polozka, 'description');
-                let obrazek = extrahujTag(polozka, 'imgurl');
-
-                if (!item_id || !nazev) continue;
-
-                const cena = parseFloat(cenaText) || 0;
-                const sklad = parseInt(extrahujTag(polozka, 'stock')) || 5;
-
-                if (obrazek) {
-                    obrazek = obrazek.replace(/&amp;/g, '&');
-                }
-
-                console.log(`[XML STAHOVAČ] [${prodejce.jmeno}] Naskladňuji: "${nazev.substring(0, 22)}...", Cena: ${cena} Kč`);
-
-                // Do unifikovaného sloupce item_id přidáme ID obchodu, aby se nám produkty nemíchaly!
-                const unikatni_item_id = `${prodejce.id}-${item_id}`;
-
-                await supabase
-                    .from('produkty')
-                    .upsert({
-                        prodejce_id: prodejce.id,
-                        item_id: unikatni_item_id,
-                        nazev: nazev,
-                        cena: cena,
-                        sklad: sklad,
-                        popis: popis,       
-                        obrazek: obrazek     
-                    }, { onConflict: 'item_id' });
-            }
-            console.log(`[XML STAHOVAČ] Synchronizace pro prodejce ${prodejce.jmeno} úspěšně dokončena.`);
-        }
-        console.log('[XML STAHOVAČ] Hromadný import úspěšně hotov!');
-    } catch (err) {
-        console.error('[XML STAHOVAČ] Kritická globální chyba:', err.message);
-    }
-}
-
-setTimeout(synchronizujXmlFeedy, 10000);
-
-// ==========================================
-// SAMOTNÝ START SERVERU (Úplný konec souboru)
-// ==========================================
-const port = process.env.PORT || 3000;
-app.listen(port, '0.0.0.0', () => {
-    console.log(`Server běží na portu ${port}`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Node.js server spuštěn na portu ${PORT}`));

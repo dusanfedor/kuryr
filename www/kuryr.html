@@ -68,8 +68,14 @@
                     const tridaKarty = z.stav === 'v_reseni' ? 'zakazka-karta v_reseni' : 'zakazka-karta nova';
                     const titulek = z.stav === 'v_reseni' ? '🔒 Moje aktivní přeprava' : '🛒 Volná zakázka (Klikni a vydělej)';
 
-                    // ZMĚNA: Použití nativního mobilního GPS protokolu (Editor v něm nemá co zkrátit)
-                    const mapovaNavigaceUrl = "geo:0,0?q=" + encodeURIComponent(z.adresa_doruceni || 'Praha');
+                    // UNIVERZÁLNÍ A ZKRÁCENÝ SYSTÉM ODKAZU BEZ COLLAPSE CHYBY
+                    const p1 = "https://google.com";
+                    const p2 = "/maps/dir/?api=1";
+                    const p3 = "&origin=" + encodeURIComponent(z.adresa_vyzvednuti || 'Sklad');
+                    const p4 = "&destination=" + encodeURIComponent(z.adresa_doruceni || 'Praha');
+                    const p5 = "&travelmode=driving";
+                    
+                    const mapovaNavigaceUrl = p1 + p2 + p3 + p4 + p5;
 
                     let tlacitkoSpodniHtml = "";
                     if (z.stav === 'nova') {
@@ -111,7 +117,7 @@
                                     </div>
                                 </div>
                                 
-                                <a class="btn-akce btn-navigace" href="${mapovaNavigaceUrl}">🗺️ SPUSTIT GPS NAVIGACI</a>
+                                <a class="btn-akce btn-navigace" href="${mapovaNavigaceUrl}" target="_blank">🗺️ SPUSTIT GPS NAVIGACI</a>
                                 
                                 ${tlacitkoSpodniHtml}
                                 <div class="cas">Zadáno v ${casFormat}</div>
@@ -141,10 +147,15 @@
                     const mojeZakazka = zakazky.find(z => Number(z.id) === Number(id));
 
                     if (mojeZakazka) {
-                        // ZMĚNA: Mobilní GPS směrování ihned po kliknutí na přijetí zakázky
-                        const autoNavUrl = "geo:0,0?q=" + encodeURIComponent(mojeZakazka.adresa_doruceni || 'Praha');
+                        const a1 = "https://google.com";
+                        const a2 = "/maps/dir/?api=1";
+                        const a3 = "&origin=" + encodeURIComponent(mojeZakazka.adresa_vyzvednuti || 'Sklad');
+                        const a4 = "&destination=" + encodeURIComponent(mojeZakazka.adresa_doruceni || 'Praha');
+                        const a5 = "&travelmode=driving";
+                        
+                        const autoNavUrl = a1 + a2 + a3 + a4 + a5;
                         alert("🚀 Zakázka uzamčena pro váš vůz!");
-                        window.location.href = autoNavUrl;
+                        window.open(autoNavUrl, '_blank');
                     }
                     nactiZakazky();
                 } else {
@@ -176,3 +187,4 @@
     </script>
 </body>
 </html>
+

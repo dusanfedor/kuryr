@@ -68,22 +68,20 @@
                     const tridaKarty = z.stav === 'v_reseni' ? 'zakazka-karta v_reseni' : 'zakazka-karta nova';
                     const titulek = z.stav === 'v_reseni' ? '🔒 Moje aktivní přeprava' : '🛒 Volná zakázka (Klikni a vydělej)';
 
-                    // STOPROCENTNĚ FUNKČNÍ NEPROUSTŘELNÝ ODPOVEDNÝ SYSTÉM PRO LINK GOOGLE MAP POMOCÍ URLSEARCHPARAMS
-                    const pNav = new URLSearchParams();
-                    pNav.append("api", "1");
-                    pNav.append("origin", z.adresa_vyzvednuti);
-                    pNav.append("destination", z.adresa_doruceni);
-                    pNav.append("travelmode", "driving");
-                    const mapovaNavigaceUrl = "https://google.com?" + pNav.toString();
+                    // BEZPEČNÝ MAPOVÝ OBJEKT PRO ORANŽOVÉ TLAČÍTKO NA KARTĚ
+                    const mapaKartaObjekt = new URL("https://google.com");
+                    mapaKartaObjekt.searchParams.append("api", "1");
+                    mapaKartaObjekt.searchParams.append("origin", z.adresa_vyzvednuti || 'Sklad Praha');
+                    mapaKartaObjekt.searchParams.append("destination", z.adresa_doruceni || 'Praha');
+                    mapaKartaObjekt.searchParams.append("travelmode", "driving");
+                    const mapovaNavigaceUrl = mapaKartaObjekt.toString();
 
-                    let tlacitkaHtml = "";
+                    // Tlačítko akce podle stavu zakázky
+                    let tlacitkoSpodniHtml = "";
                     if (z.stav === 'nova') {
-                        tlacitkaHtml = '<button class="btn-akce btn-prijmout" onclick="prijmoutZakazku(' + z.id + ')">⚡ Přijmout zakázku a jet!</button>';
-                    } else if (z.stav === 'v_reseni' && z.kuryr_id === MY_KURYR_ID) {
-                        tlacitkaHtml = `
-                            <a class="btn-akce btn-navigace" href="${mapovaNavigaceUrl}" target="_blank">🗺️ SPUSTIT GPS NAVIGACI (A ➔ B)</a>
-                            <button class="btn-akce btn-doruceno" onclick="potvrditDoruceni(${z.id})">✅ Balík předán (Doručeno)</button>
-                        `;
+                        tlacitkoSpodniHtml = '<button class="btn-akce btn-prijmout" onclick="prijmoutZakazku(' + z.id + ')">⚡ Přijmout zakázku a jet!</button>';
+                    } else {
+                        tlacitkoSpodniHtml = '<button class="btn-akce btn-doruceno" onclick="potvrditDoruceni(' + z.id + ')">✅ Balík předán (Doručeno)</button>';
                     }
 
                     vygenerovaneHtml += `
@@ -92,7 +90,7 @@
                             <div class="detaily">
                                 <span class="nazev">${titulek}</span>
                                 <div style="margin-top: 3px; font-size: 1.05rem; font-weight: bold; color: #28a745; text-align: left;">
-                                    Odměna: ${z.cena_dopravy} Kč
+                                    Odměna: ${z.cena_dopravy || 90} Kč
                                 </div>
                                 
                                 <div class="trasa-box">
@@ -100,9 +98,9 @@
                                         <span>🟢</span>
                                         <div>
                                             <span class="bod-vyzvednout">A: NAKLÁDKA:</span>
-                                            <div class="adresa-text">${z.adresa_vyzvednuti}</div>
+                                            <div class="adresa-text">${z.adresa_vyzvednuti || 'Sklad'}</div>
                                             <div style="margin-top: 4px; font-size: 0.85rem; text-align: left;">
-                                                <a href="tel:${z.telefon_vyzvednuti}" style="color: #aaa; text-decoration: none;">📞 Sklad: ${z.telefon_vyzvednuti}</a>
+                                                <a href="tel:${z.telefon_vyzvednuti || ''}" style="color: #aaa; text-decoration: none;">📞 Sklad: ${z.telefon_vyzvednuti || ''}</a>
                                             </div>
                                         </div>
                                     </div>
@@ -111,14 +109,18 @@
                                         <span>🔴</span>
                                         <div>
                                             <span class="bod-dorucit">B: VYKLÁDKA:</span>
-                                            <div class="adresa-text" style="color: #ffc107; font-weight: bold;">${z.adresa_doruceni}</div>
+                                            <div class="adresa-text" style="color: #ffc107; font-weight: bold;">${z.adresa_doruceni || 'Zákazník'}</div>
                                             <div style="margin-top: 4px; font-size: 0.88rem; text-align: left;">
-                                                <a href="tel:${z.telefon_doruceni}" style="color: #28a745; text-decoration: none; font-weight: bold;">📞 Zákazník: ${z.telefon_doruceni}</a>
+                                                <a href="tel:${z.telefon_doruceni || ''}" style="color: #28a745; text-decoration: none; font-weight: bold;">📞 Zákazník: ${z.telefon_doruceni || ''}</a>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                ${tlacitkaHtml}
+                                
+                                <!-- ORANŽOVÉ TLAČÍTKO JE VYKRESLENO ZDE - NATVRDO PRO KAŽDOU KARTU ZAKÁZKY -->
+                                <a class="btn-akce btn-navigace" href="${mapovaNavigaceUrl}" target="_blank">🗺️ SPUSTIT GPS NAVIGACI (A ➔ B)</a>
+                                
+                                ${tlacitkoSpodniHtml}
                                 <div class="cas">Zadáno v ${casFormat}</div>
                             </div>
                         </div>
@@ -132,47 +134,24 @@
             }
         }
 
-       async function prijmoutZakazku(id) {
-    try {
-        const res = await fetch('/api/kuryr/prijmout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ zakazka_id: id, kuryr_id: MY_KURYR_ID })
-        });
-        const data = await res.json();
-        
-        if (res.ok) {
-            const resAktualni = await fetch('/api/kuryr/objednavky?kuryr_id=' + MY_KURYR_ID);
-            const zakazky = await resAktualni.json();
-            const mojeZakazka = zakazky.find(z => Number(z.id) === Number(id));
-
-            if (mojeZakazka) {
-                // KONSTRUKTOR: Prohlížeč sestaví validní adresu sám bez ručního psaní lomítek a otazníků
-                                    // Konstruktor adresy pro statické oranžové tlačítko na kartě
-                    const mapaKartaObjekt = new URL("https://google.com");
-                    mapaKartaObjekt.searchParams.append("api", "1");
-                    mapaKartaObjekt.searchParams.append("origin", z.adresa_vyzvednuti);
-                    mapaKartaObjekt.searchParams.append("destination", z.adresa_doruceni);
-                    mapaKartaObjekt.searchParams.append("travelmode", "driving");
-                    
-                    const mapovaNavigaceUrl = mapaKartaObjekt.toString();
-
+        async function prijmoutZakazku(id) {
+            try {
+                const res = await fetch('/api/kuryr/prijmout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zakazka_id: id, kuryr_id: MY_KURYR_ID })
+                });
                 
-                alert("🚀 Zakázka uzamčena pro váš vůz! Otevírám GPS navigaci...");
-                window.open(autoNavUrl, '_blank');
-            }
-            
-            nactiZakazky();
-        } else {
-            alert("❌ " + data.chyba);
-            nactiZakazky();
+                if (res.ok) {
+                    alert("🚀 Zakázka uzamčena pro váš vůz!");
+                    nactiZakazky();
+                } else {
+                    const data = await res.json();
+                    alert("❌ " + (data.chyba || "Chyba převzetí."));
+                    nactiZakazky();
+                }
+            } catch (e) { alert("Chyba sítě."); }
         }
-    } catch (e) { 
-        console.error(e);
-        alert("Chyba sítě při přebírání zakázky."); 
-    }
-}
-
 
         async function potvrditDoruceni(id) {
             try {

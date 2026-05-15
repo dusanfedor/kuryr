@@ -68,13 +68,8 @@
                     const tridaKarty = z.stav === 'v_reseni' ? 'zakazka-karta v_reseni' : 'zakazka-karta nova';
                     const titulek = z.stav === 'v_reseni' ? '🔒 Moje aktivní přeprava' : '🛒 Volná zakázka (Klikni a vydělej)';
 
-                    // MATEMATICKY NEPRŮSTŘELNÉ RUČNÍ SPOJENÍ URL BEZ CHYBY V PARAMETRECH
-                    const odkazZáklad = "https://google.com";
-                    const odkazStart = "&origin=" + encodeURIComponent(z.adresa_vyzvednuti || 'Sklad Praha');
-                    const odkazCíl = "&destination=" + encodeURIComponent(z.adresa_doruceni || 'Praha');
-                    const odkazAuto = "&travelmode=driving";
-
-                    const mapovaNavigaceUrl = odkazZáklad + odkazStart + odkazCíl + odkazAuto;
+                    // UNIVERZÁLNÍ GEO SYSTÉMOVÝ ODKAZ PRO MOBILNÍ GPS NAVIGACE
+                    const mapovaNavigaceUrl = "geo:0,0?q=" + encodeURIComponent(z.adresa_doruceni);
 
                     let tlacitkoSpodniHtml = "";
                     if (z.stav === 'nova') {
@@ -116,7 +111,7 @@
                                     </div>
                                 </div>
                                 
-                                <a class="btn-akce btn-navigace" href="${mapovaNavigaceUrl}" target="_blank">🗺️ SPUSTIT GPS NAVIGACI (A ➔ B)</a>
+                                <a class="btn-akce btn-navigace" href="${mapovaNavigaceUrl}">🗺️ SPUSTIT GPS NAVIGACI</a>
                                 
                                 ${tlacitkoSpodniHtml}
                                 <div class="cas">Zadáno v ${casFormat}</div>
@@ -146,16 +141,10 @@
                     const mojeZakazka = zakazky.find(z => Number(z.id) === Number(id));
 
                     if (mojeZakazka) {
-                        // RUČNÍ SPOJENÍ PRO AUTOMATICKÉ OKNO BEZ CHYBY
-                        const aZáklad = "https://google.com";
-                        const aStart = "&origin=" + encodeURIComponent(mojeZakazka.adresa_vyzvednuti);
-                        const aCíl = "&destination=" + encodeURIComponent(mojeZakazka.adresa_doruceni);
-                        const aAuto = "&travelmode=driving";
-
-                        const autoNavUrl = aZáklad + aStart + aCíl + aAuto;
-                        
+                        // UNIVERZÁLNÍ SPUŠTĚNÍ MAPY PRO MOBIL PO PŘEVZETÍ ZAKÁZKY
+                        const autoNavUrl = "geo:0,0?q=" + encodeURIComponent(mojeZakazka.adresa_doruceni);
                         alert("🚀 Zakázka uzamčena pro váš vůz!");
-                        window.open(autoNavUrl, '_blank');
+                        window.location.href = autoNavUrl;
                     }
                     nactiZakazky();
                 } else {

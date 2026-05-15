@@ -68,8 +68,8 @@
                     const tridaKarty = z.stav === 'v_reseni' ? 'zakazka-karta v_reseni' : 'zakazka-karta nova';
                     const titulek = z.stav === 'v_reseni' ? '🔒 Moje aktivní přeprava' : '🛒 Volná zakázka (Klikni a vydělej)';
 
-                    // UNIVERZÁLNÍ GEO SYSTÉMOVÝ ODKAZ PRO MOBILNÍ GPS NAVIGACE
-                    const mapovaNavigaceUrl = "geo:0,0?q=" + encodeURIComponent(z.adresa_doruceni);
+                    // ZMĚNA: Použití nativního mobilního GPS protokolu (Editor v něm nemá co zkrátit)
+                    const mapovaNavigaceUrl = "geo:0,0?q=" + encodeURIComponent(z.adresa_doruceni || 'Praha');
 
                     let tlacitkoSpodniHtml = "";
                     if (z.stav === 'nova') {
@@ -141,8 +141,8 @@
                     const mojeZakazka = zakazky.find(z => Number(z.id) === Number(id));
 
                     if (mojeZakazka) {
-                        // UNIVERZÁLNÍ SPUŠTĚNÍ MAPY PRO MOBIL PO PŘEVZETÍ ZAKÁZKY
-                        const autoNavUrl = "geo:0,0?q=" + encodeURIComponent(mojeZakazka.adresa_doruceni);
+                        // ZMĚNA: Mobilní GPS směrování ihned po kliknutí na přijetí zakázky
+                        const autoNavUrl = "geo:0,0?q=" + encodeURIComponent(mojeZakazka.adresa_doruceni || 'Praha');
                         alert("🚀 Zakázka uzamčena pro váš vůz!");
                         window.location.href = autoNavUrl;
                     }

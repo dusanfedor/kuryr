@@ -132,39 +132,47 @@
             }
         }
 
-        async function prijmoutZakazku(id) {
-            try {
-                const res = await fetch('/api/kuryr/prijmout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ zakazka_id: id, kuryr_id: MY_KURYR_ID })
-                });
-                const data = await res.json();
-                
-                if (res.ok) {
-                    const resAktualni = await fetch('/api/kuryr/objednavky?kuryr_id=' + MY_KURYR_ID);
-                    const zakazky = await resAktualni.json();
-                    const mojeZakazka = zakazky.find(z => Number(z.id) === Number(id));
+       async function prijmoutZakazku(id) {
+    try {
+        const res = await fetch('/api/kuryr/prijmout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ zakazka_id: id, kuryr_id: MY_KURYR_ID })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            const resAktualni = await fetch('/api/kuryr/objednavky?kuryr_id=' + MY_KURYR_ID);
+            const zakazky = await resAktualni.json();
+            const mojeZakazka = zakazky.find(z => Number(z.id) === Number(id));
 
-                    if (mojeZakazka) {
-                        const paramsAuto = new URLSearchParams();
-                        paramsAuto.append("api", "1");
-                        paramsAuto.append("origin", mojeZakazka.adresa_vyzvednuti);
-                        paramsAuto.append("destination", mojeZakazka.adresa_doruceni);
-                        paramsAuto.append("travelmode", "driving");
-                        const autoNavUrl = "https://google.com?" + paramsAuto.toString();
-                        
-                        alert("🚀 Zakázka uzamčena pro váš vůz!\n\nNyní klikněte na nově zobrazené oranžové tlačítko pro spuštění map.");
-                        window.open(autoNavUrl, '_blank');
-                    }
+            if (mojeZakazka) {
+                // KONSTRUKTOR: Prohlížeč sestaví validní adresu sám bez ručního psaní lomítek a otazníků
+                                    // Konstruktor adresy pro statické oranžové tlačítko na kartě
+                    const mapaKartaObjekt = new URL("https://google.com");
+                    mapaKartaObjekt.searchParams.append("api", "1");
+                    mapaKartaObjekt.searchParams.append("origin", z.adresa_vyzvednuti);
+                    mapaKartaObjekt.searchParams.append("destination", z.adresa_doruceni);
+                    mapaKartaObjekt.searchParams.append("travelmode", "driving");
                     
-                    nactiZakazky();
-                } else {
-                    alert("❌ " + data.chyba);
-                    nactiZakazky();
-                }
-            } catch (e) { alert("Chyba sítě."); }
+                    const mapovaNavigaceUrl = mapaKartaObjekt.toString();
+
+                
+                alert("🚀 Zakázka uzamčena pro váš vůz! Otevírám GPS navigaci...");
+                window.open(autoNavUrl, '_blank');
+            }
+            
+            nactiZakazky();
+        } else {
+            alert("❌ " + data.chyba);
+            nactiZakazky();
         }
+    } catch (e) { 
+        console.error(e);
+        alert("Chyba sítě při přebírání zakázky."); 
+    }
+}
+
 
         async function potvrditDoruceni(id) {
             try {
